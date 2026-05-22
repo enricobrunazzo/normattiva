@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -266,19 +267,16 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
 
 def _extract_json(raw: str) -> dict:
     """Estrae il primo oggetto JSON valido da una stringa, anche con testo attorno."""
-    # 1. tenta parse diretto
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
-    # 2. estrae blocco ```json ... ``` o ``` ... ```
     m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
     if m:
         try:
             return json.loads(m.group(1).strip())
         except json.JSONDecodeError:
             pass
-    # 3. cerca il primo { ... } di livello radice
     m = re.search(r"(\{[\s\S]*\})", raw)
     if m:
         try:
@@ -291,15 +289,12 @@ def _extract_json(raw: str) -> dict:
 # ── Groq ranking (Llama 3.3 70B — free tier) ──────────────────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list) -> list:
-    """
-    Chiama Groq (Llama 3.3 70B) per riordinare i candidati e aggiungere motivazione.
-    Free tier: 14.400 req/giorno, nessuna carta di credito.
-    Usa solo urllib della stdlib — zero dipendenze esterne.
-    Restituisce la lista arricchita, o i candidati originali in caso di errore.
-    """
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
+        print("[GROQ] No API key found in environment")
         return candidates
+
+    print(f"[GROQ] Using key: {api_key[:8]}...{api_key[-4:]}")
 
     try:
         norme_list = "\n".join(
@@ -363,8 +358,17 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
         return result
 
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:500]
+        print(f"[GROQ ERROR] HTTPError {e.code} {e.reason}: {body}")
+        return candidates
+    except urllib.error.URLError as e:
+        print(f"[GROQ ERROR] URLError: {e.reason}")
+        return candidates
     except Exception as e:
+        import traceback
         print(f"[GROQ ERROR] {type(e).__name__}: {e}")
+        print(traceback.format_exc())
         return candidates
 
 
