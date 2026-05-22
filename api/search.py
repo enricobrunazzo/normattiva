@@ -142,6 +142,81 @@ NORMATIVE_DB = [
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
+    # ── NUOVE NORME ──────────────────────────────────────────────────────────────
+    {
+        "id": "l_241_1990",
+        "titolo": "Legge sul procedimento amministrativo",
+        "estremi": "L. 7 agosto 1990, n. 241",
+        "descrizione": "Regola il procedimento amministrativo in tutte le sue fasi: avvio, istruttoria, partecipazione dei privati, motivazione degli atti, silenzio-assenso, accesso agli atti. È il riferimento trasversale per la legittimità di qualsiasi provvedimento della PA, incluse determine e delibere.",
+        "articoli_chiave": [
+            "art. 1 — principi generali (efficacia, economicità, imparzialità)",
+            "art. 3 — obbligo di motivazione del provvedimento",
+            "art. 7 — comunicazione avvio del procedimento",
+            "art. 21-octies — annullabilità del provvedimento",
+            "art. 22 — accesso agli atti amministrativi",
+        ],
+        "tags": ["determina", "delibera", "ordinanza", "procedimento", "motivazione", "accesso", "comune", "provincia", "appalto", "acquisto"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1990-08-07;241",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+241+1990+procedimento+amministrativo",
+    },
+    {
+        "id": "dlgs_50_2016",
+        "titolo": "Codice dei contratti pubblici 2016 (previgente)",
+        "estremi": "D.Lgs. 18 aprile 2016, n. 50",
+        "descrizione": "Codice appalti previgente, abrogato dal D.Lgs. 36/2023 ma ancora applicabile ai contratti aggiudicati prima del 1° luglio 2023 e ai procedimenti in corso. Rilevante per contestare o gestire appalti storici, proroghe e collaudi di contratti avviati sotto la vecchia disciplina.",
+        "articoli_chiave": [
+            "art. 36 — contratti sotto soglia (affidamento diretto, procedura negoziata)",
+            "art. 63 — procedura negoziata senza bando",
+            "art. 95 — criteri di aggiudicazione",
+            "art. 106 — modifica dei contratti in corso",
+        ],
+        "tags": ["appalto", "gara", "acquisto", "affidamento", "contratto", "proroga", "servizi", "lavori", "cig"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2016-04-18;50",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+50+2016+codice+contratti+pubblici",
+    },
+    {
+        "id": "l_296_2006_consip",
+        "titolo": "Obbligo Consip / MEPA (L. Finanziaria 2007)",
+        "estremi": "L. 27 dicembre 2006, n. 296, art. 1 co. 449-450",
+        "descrizione": "Obbliga le amministrazioni statali ad approvvigionarsi tramite convenzioni Consip o a utilizzarne i parametri come prezzi di riferimento (benchmark). Le PA non statali (Comuni, Province, ASL) devono comunque ricorrere al MEPA o giustificare la convenienza economica di procedure autonome. Il mancato rispetto espone il RUP a responsabilità erariale.",
+        "articoli_chiave": [
+            "art. 1 co. 449 — obbligo adesione convenzioni Consip per PA statali",
+            "art. 1 co. 450 — obbligo MEPA per acquisti sotto soglia comunitaria",
+            "art. 1 co. 452 — benchmark prezzi Consip per PA non statali",
+        ],
+        "tags": ["mepa", "consip", "acquisto", "appalto", "fornitore", "determina", "cig", "affidamento", "benchmark"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2006-12-27;296",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+296+2006+finanziaria+consip+mepa+449",
+    },
+    {
+        "id": "dlgs_231_2001",
+        "titolo": "Responsabilità amministrativa degli enti (D.Lgs. 231)",
+        "estremi": "D.Lgs. 8 giugno 2001, n. 231",
+        "descrizione": "Disciplina la responsabilità amministrativa delle persone giuridiche private per reati commessi nell'interesse o a vantaggio dell'ente. Rilevante negli appalti pubblici: la PA deve verificare che il fornitore privato sia dotato di Modello Organizzativo 231 (MOG) per prevenire reati di corruzione, frode e riciclaggio.",
+        "articoli_chiave": [
+            "art. 5 — responsabilità dell'ente per reati dei propri soggetti",
+            "art. 6 — esimenti: adozione ed efficace attuazione del MOG",
+            "art. 24 — reati contro la PA (corruzione, concussione, frode)",
+            "art. 25 — peculato, corruzione e induzione indebita",
+        ],
+        "tags": ["anticorruzione", "appalto", "fornitore", "contratto", "gara", "conflitto", "determina"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-06-08;231",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+231+2001+responsabilita+amministrativa+enti",
+    },
+    {
+        "id": "circ_agid_cloud_2021",
+        "titolo": "Qualificazione cloud PA — Linee guida AgID / ACN",
+        "estremi": "Circolare AgID n. 2/2018 + Determinazione AgID 628/2021 + Regolamento ACN 2022",
+        "descrizione": "Definisce i requisiti di qualificazione per i servizi cloud acquistabili dalla PA (IaaS, PaaS, SaaS). Solo i servizi presenti nel Catalogo Cloud PA (marketplace.cloud.gov.it) possono essere acquisiti. Classifica i servizi in tre livelli: PSN, Cloud qualificato, SaaS qualificato. Rilevante per ogni acquisto cloud, anche tramite MEPA.",
+        "articoli_chiave": [
+            "Determinazione 628/2021 — qualificazione servizi SaaS per PA",
+            "Regolamento ACN 2022 — classificazione dati e servizi cloud",
+            "Circolare AgID 2/2018 — criteri qualificazione CSP e SaaS",
+        ],
+        "tags": ["cloud", "software", "saas", "agid", "digitalizzazione", "pnrr", "ict", "acquisto", "mepa"],
+        "url_normattiva": "https://www.agid.gov.it/it/infrastrutture/cloud-pa",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=AgID+qualificazione+cloud+PA+628+2021",
+    },
 ]
 
 # Indice tag → norm_id
@@ -161,8 +236,8 @@ TIPO_ATTO_TAGS = {
 
 SEMANTIC_MAP = {
     "acquisto":      ["acquisto", "appalto", "cig"],
-    "software":      ["software", "digitalizzazione", "dati", "privacy"],
-    "cloud":         ["cloud", "pnrr", "software"],
+    "software":      ["software", "digitalizzazione", "dati", "privacy", "saas"],
+    "cloud":         ["cloud", "pnrr", "software", "saas", "agid"],
     "hardware":      ["acquisto", "appalto"],
     "servizi":       ["appalto", "acquisto", "sicurezza", "cig"],
     "manutenzione":  ["appalto", "sicurezza"],
@@ -172,12 +247,12 @@ SEMANTIC_MAP = {
     "dati":          ["dati", "privacy", "software"],
     "gdpr":          ["privacy", "dati"],
     "trasparenza":   ["trasparenza", "anticorruzione"],
-    "anticorruzione":["anticorruzione", "trasparenza"],
+    "anticorruzione": ["anticorruzione", "trasparenza"],
     "gara":          ["gara", "appalto", "acquisto", "cig"],
     "appalto":       ["appalto", "gara", "sicurezza", "cig"],
     "fornitore":     ["fornitore", "acquisto", "appalto"],
-    "mepa":          ["mepa", "acquisto", "cig"],
-    "consip":        ["mepa", "acquisto"],
+    "mepa":          ["mepa", "acquisto", "cig", "consip"],
+    "consip":        ["mepa", "acquisto", "consip"],
     "lavori":        ["lavori", "sicurezza", "appalto"],
     "sicurezza":     ["sicurezza", "appalto"],
     "personale":     ["personale", "consulenza"],
@@ -187,18 +262,29 @@ SEMANTIC_MAP = {
     "regione":       ["comune"],
     "provincia":     ["comune", "bilancio"],
     "incarico":      ["consulenza", "personale"],
-    "digitale":      ["software", "cloud", "pnrr"],
-    "ict":           ["software", "cloud"],
+    "digitale":      ["software", "cloud", "pnrr", "agid"],
+    "ict":           ["software", "cloud", "agid"],
     "gestionale":    ["software", "dati"],
     "licenza":       ["software"],
     "abbonamento":   ["software", "acquisto"],
-    "saas":          ["software", "cloud", "privacy"],
-    "agid":          ["software", "cloud", "pnrr"],
+    "saas":          ["software", "cloud", "privacy", "agid"],
+    "agid":          ["software", "cloud", "pnrr", "agid"],
     "cig":           ["cig", "acquisto", "appalto"],
     "cup":           ["cup", "cig", "pnrr"],
     "tracciabilita": ["cig", "tracciabilità"],
-    "affidamento":   ["acquisto", "appalto", "cig"],
+    "affidamento":   ["acquisto", "appalto", "cig", "affidamento"],
     "conflitto":     ["anticorruzione", "conflitto"],
+    # nuove chiavi semantiche
+    "procedimento":  ["procedimento", "motivazione", "determina"],
+    "motivazione":   ["motivazione", "procedimento", "determina"],
+    "accesso":       ["accesso", "trasparenza"],
+    "proroga":       ["proroga", "contratto", "appalto"],
+    "benchmark":     ["benchmark", "mepa", "consip"],
+    "mog":           ["anticorruzione", "fornitore", "appalto"],
+    "231":           ["anticorruzione", "fornitore", "appalto"],
+    "qualificazione": ["cloud", "agid", "saas"],
+    "marketplace":   ["cloud", "agid", "mepa"],
+    "psn":           ["cloud", "agid", "pnrr"],
 }
 
 STOP_WORDS = {
@@ -226,7 +312,6 @@ def _importo_tags(importo_str: str, convenzione: bool = False) -> list:
     val = _parse_importo(importo_str)
     if val is None:
         return []
-    # In convenzione il tag-engine privilegia mepa/consip invece di gara/appalto
     if convenzione:
         return ["acquisto", "mepa", "consip", "cig"]
     if val <= SEMI_THRESHOLD:
@@ -288,9 +373,8 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
             for nid in TAG_INDEX.get(sem_tag, []):
                 _add(nid, 1)
 
-    # Se convenzione, boost esplicito su tracciabilità e trasparenza
     if convenzione:
-        for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000"):
+        for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000", "l_296_2006_consip"):
             if boost_id in NORME_BY_ID:
                 _add(boost_id, 4)
 
@@ -347,7 +431,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
         )
         importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
 
-        # Riga contestuale aggiuntiva se è una convenzione
         convenzione_info = (
             "- Modalità di acquisto: CONVENZIONE CONSIP / ORDINE SU MEPA "
             "(non è richiesta gara autonoma; la procedura è già assolta dalla convenzione quadro)\n"
@@ -376,8 +459,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
             "max_tokens": 2048,
-            "response_format": {"type": "json_object"},
-        }).encode("utf-8")
+        }).encode()
 
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -385,138 +467,87 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "application/json",
             },
+            method="POST",
         )
-        resp = urllib.request.urlopen(req, timeout=8)
-        data = json.loads(resp.read().decode("utf-8"))
+
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            body = json.loads(resp.read().decode())
+
         elapsed = time.time() - t0
-        print(f"[GROQ] OK — {elapsed*1000:.0f}ms", flush=True)
+        print(f"[GROQ] OK | elapsed={elapsed:.2f}s", flush=True)
 
-        raw = data["choices"][0]["message"]["content"].strip()
-        print(f"[GROQ RAW] {raw[:500]!r}", flush=True)
+        raw_content = body["choices"][0]["message"]["content"]
+        ranked_data = _extract_json(raw_content)
+        ranked_list = ranked_data.get("ranked", [])
 
-        ranked_data = _extract_json(raw)
+        ranked_map = {item["id"]: item.get("motivation", "") for item in ranked_list}
+        reranked = []
+        for item in ranked_list:
+            nid = item["id"]
+            if nid in NORME_BY_ID:
+                norma = NORME_BY_ID[nid].copy()
+                norma["score"] = 100 - len(reranked)
+                norma["ai_motivation"] = ranked_map.get(nid, "")
+                reranked.append(norma)
 
-        by_id = {n["id"]: n for n in groq_candidates}
-        result = []
-        ranked_ids = set()
-        for item in ranked_data.get("ranked", []):
-            nid = item.get("id", "")
-            if nid in by_id:
-                norma = by_id[nid].copy()
-                norma["ai_motivation"] = item.get("motivation", "")
-                result.append(norma)
-                ranked_ids.add(nid)
-
+        seen = {n["id"] for n in reranked}
         for n in groq_candidates:
-            if n["id"] not in ranked_ids:
+            if n["id"] not in seen:
                 n["ai_motivation"] = ""
-                result.append(n)
+                reranked.append(n)
 
-        for n in remaining:
-            n["ai_motivation"] = ""
-            result.append(n)
-
-        return result
+        return reranked + remaining
 
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")[:500]
-        elapsed = time.time() - t0
-        print(f"[GROQ ERROR] HTTPError {e.code} {e.reason} ({elapsed*1000:.0f}ms): {body}", flush=True)
+        err_body = e.read().decode(errors="replace")[:500]
+        print(f"[GROQ ERROR] HTTP {e.code} | {err_body}", flush=True)
         return candidates
-    except urllib.error.URLError as e:
-        elapsed = time.time() - t0
-        print(f"[GROQ ERROR] URLError ({elapsed*1000:.0f}ms): {e.reason}", flush=True)
-        return candidates
-    except Exception as e:
-        import traceback
-        elapsed = time.time() - t0
-        print(f"[GROQ ERROR] {type(e).__name__} ({elapsed*1000:.0f}ms): {e}", flush=True)
-        print(traceback.format_exc(), flush=True)
+    except Exception as exc:
+        print(f"[GROQ ERROR] {type(exc).__name__}: {exc}", flush=True)
         return candidates
 
 
-# ── Entry point ────────────────────────────────────────────────────────────────
-def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "",
-               importo: str = "", convenzione: bool = False) -> dict:
-    candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione)
-    results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
-
-    full_text = f"{testo} {oggetto}".lower()
-    tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
-    kw_set = set()
-    for token in tokens:
-        token = token.strip("'\"()[]")
-        if token not in STOP_WORDS and len(token) >= 4 and (
-            token in TAG_INDEX or token in SEMANTIC_MAP
-        ):
-            kw_set.add(token)
-
-    ai_active = bool(os.environ.get("GROQ_API_KEY", ""))
-
-    return {
-        "keywords": list(kw_set)[:10],
-        "importo_label": _importo_label(importo, convenzione) if importo else "",
-        "convenzione": convenzione,
-        "results": results,
-        "total": len(results),
-        "ai_active": ai_active,
-    }
-
-
-# ── Handler Vercel ─────────────────────────────────────────────────────────────
+# ── Handler HTTP ───────────────────────────────────────────────────────────────
 class handler(BaseHTTPRequestHandler):
-
     def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        testo      = params.get("q", [""])[0].strip()
+        tipo_atto  = params.get("tipo_atto", [""])[0].strip().lower()
+        oggetto    = params.get("oggetto", [""])[0].strip()
+        importo    = params.get("importo", [""])[0].strip()
+        convenzione = params.get("convenzione", ["false"])[0].strip().lower() in ("true", "1", "yes")
+
         t_start = time.time()
-        try:
-            parsed = urllib.parse.urlparse(self.path)
-            params = urllib.parse.parse_qs(parsed.query)
-            testo       = params.get("testo",       [""])[0].strip()
-            tipo_atto   = params.get("tipo_atto",   [""])[0].strip()
-            oggetto     = params.get("oggetto",     [""])[0].strip()
-            importo     = params.get("importo",     [""])[0].strip()
-            # convenzione=true oppure convenzione=1
-            conv_raw    = params.get("convenzione", [""])[0].strip().lower()
-            convenzione = conv_raw in ("true", "1", "yes", "si", "sì")
 
-            print(
-                f"[REQUEST] testo={testo[:40]!r} tipo_atto={tipo_atto!r} "
-                f"oggetto={oggetto[:40]!r} importo={importo!r} convenzione={convenzione} "
-                f"groq_key_present={bool(os.environ.get('GROQ_API_KEY', ''))}",
-                flush=True,
-            )
+        candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione)
+        results    = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
-            if not testo and not oggetto:
-                self._send_json({"error": "Inserisci almeno una descrizione o un oggetto"}, 400)
-                return
-            data = find_norme(testo, tipo_atto, oggetto, importo, convenzione)
-            elapsed_ms = int((time.time() - t_start) * 1000)
-            print(f"[REQUEST] completed in {elapsed_ms}ms | ai_active={data['ai_active']}", flush=True)
-            self._send_json(data)
-        except Exception as e:
-            elapsed_ms = int((time.time() - t_start) * 1000)
-            print(f"[REQUEST ERROR] {elapsed_ms}ms — {e}", flush=True)
-            self._send_json({"error": str(e)}, 500)
+        importo_label = _importo_label(importo, convenzione)
 
-    def do_OPTIONS(self):
+        output = {
+            "query": testo,
+            "tipo_atto": tipo_atto,
+            "oggetto": oggetto,
+            "importo_label": importo_label,
+            "convenzione": convenzione,
+            "results": results,
+            "elapsed_ms": round((time.time() - t_start) * 1000),
+        }
+
+        body = json.dumps(output, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(200)
-        self._cors()
-        self.end_headers()
-
-    def _send_json(self, data: dict, status: int = 200):
-        body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
-        self.send_response(status)
-        self._cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body))
-        )
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _cors(self):
+    def do_OPTIONS(self):
+        self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
