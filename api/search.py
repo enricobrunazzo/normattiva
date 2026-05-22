@@ -317,7 +317,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 "Content-Type": "application/json",
             },
         )
-        resp = urllib.request.urlopen(req, timeout=20)
+        resp = urllib.request.urlopen(req, timeout=8)
         data = json.loads(resp.read().decode("utf-8"))
         raw = data["choices"][0]["message"]["content"].strip()
 
@@ -347,8 +347,8 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
         return result
 
-    except Exception:
-        # Qualsiasi errore → fallback motore classico
+    except Exception as e:
+        print(f"[GROQ ERROR] {type(e).__name__}: {e}")
         return candidates
 
 
