@@ -1,25 +1,15 @@
-"""Endpoint /api/search — ricerca normativa PA con ranking Gemini Flash."""
+"""Endpoint /api/search — ricerca normativa PA con ranking Gemini."""
 from http.server import BaseHTTPRequestHandler
 import json
 import os
 import urllib.parse
 
-# ── Gemini ────────────────────────────────────────────────────────────────────
-try:
-    import google.generativeai as genai
-    _GEMINI_AVAILABLE = True
-except ImportError:
-    _GEMINI_AVAILABLE = False
-
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL   = "gemini-1.5-flash-latest"
-
-# ── Soglie D.Lgs. 36/2023 ────────────────────────────────────────────────────
+# ── Soglie D.Lgs. 36/2023 ─────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
-# ── Database normativo locale ─────────────────────────────────────────────────
+# ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
         "id": "dlgs_36_2023",
@@ -35,7 +25,7 @@ NORMATIVE_DB = [
         "id": "dlgs_82_2005",
         "titolo": "Codice dell'Amministrazione Digitale (CAD)",
         "estremi": "D.Lgs. 7 marzo 2005, n. 82",
-        "descrizione": "Regola la digitalizzazione della PA, l'uso di software, cloud computing e servizi ICT. Stabilisce l'obbligo di preferenza per soluzioni open source (art. 68) e il riuso del software (art. 69). Base normativa per acquisti ICT e cloud da parte di enti pubblici.",
+        "descrizione": "Regola la digitalizzazione della PA, l'uso di software, cloud computing e servizi ICT. Stabilisce l'obbligo di preferenza per soluzioni open source (art. 68) e il riuso del software (art. 69).",
         "articoli_chiave": ["art. 68 — analisi comparativa soluzioni", "art. 69 — riuso del software", "art. 50 — disponibilità dei dati"],
         "tags": ["software", "cloud", "digitalizzazione", "ict", "dati", "agid"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2005-03-07;82",
@@ -45,7 +35,7 @@ NORMATIVE_DB = [
         "id": "dlgs_33_2013",
         "titolo": "Trasparenza e accesso civico",
         "estremi": "D.Lgs. 14 marzo 2013, n. 33",
-        "descrizione": "Obbliga le PA alla pubblicazione su \"Amministrazione Trasparente\" di dati su contratti, affidamenti, appalti e spese. Ogni determina di acquisto rilevante deve essere pubblicata. Disciplina anche il FOIA (accesso civico generalizzato, art. 5).",
+        "descrizione": "Obbliga le PA alla pubblicazione su 'Amministrazione Trasparente' di dati su contratti, affidamenti e spese. Ogni determina di acquisto rilevante deve essere pubblicata. Disciplina anche il FOIA (art. 5).",
         "articoli_chiave": ["art. 23 — obblighi pubblicazione provvedimenti", "art. 37 — pubblicazione contratti e appalti", "art. 5 — accesso civico"],
         "tags": ["trasparenza", "acquisto", "appalto", "determina", "delibera", "anticorruzione"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2013-03-14;33",
@@ -55,7 +45,7 @@ NORMATIVE_DB = [
         "id": "l_190_2012",
         "titolo": "Legge Anticorruzione",
         "estremi": "L. 6 novembre 2012, n. 190",
-        "descrizione": "Introduce misure per la prevenzione e la repressione della corruzione nella PA. Obbliga gli enti a dotarsi di Piano Triennale di Prevenzione della Corruzione (PTPCT). L'art. 1 co. 41 impone l'attestazione di assenza di conflitto d'interessi in ogni provvedimento.",
+        "descrizione": "Introduce misure per la prevenzione della corruzione nella PA. Obbliga gli enti al PTPCT. L'art. 1 co. 41 richiede l'attestazione di assenza di conflitto d'interessi in ogni provvedimento.",
         "articoli_chiave": ["art. 1 — PTPCT", "art. 1 co. 9 — misure obbligatorie", "art. 1 co. 41 — conflitto d'interessi"],
         "tags": ["anticorruzione", "trasparenza", "acquisto", "appalto", "determina", "conflitto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2012-11-06;190",
@@ -65,7 +55,7 @@ NORMATIVE_DB = [
         "id": "dlgs_267_2000",
         "titolo": "Testo Unico Enti Locali (TUEL)",
         "estremi": "D.Lgs. 18 agosto 2000, n. 267",
-        "descrizione": "Disciplina l'organizzazione e il funzionamento di Comuni e Province. Regolamenta le competenze degli organi (Consiglio, Giunta, Dirigenti), la forma degli atti (delibere, determine) e la gestione finanziaria. Riferimento primario per ogni atto amministrativo di ente locale.",
+        "descrizione": "Disciplina l'organizzazione di Comuni e Province. Regolamenta competenze degli organi, forma degli atti (delibere, determine) e gestione finanziaria. Riferimento primario per ogni atto amministrativo di ente locale.",
         "articoli_chiave": ["art. 107 — competenze dirigenziali", "art. 192 — determinazione a contrarre", "art. 183 — assunzione impegno di spesa"],
         "tags": ["comune", "provincia", "determina", "delibera", "ordinanza", "acquisto", "appalto", "bilancio"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2000-08-18;267",
@@ -75,7 +65,7 @@ NORMATIVE_DB = [
         "id": "dlgs_165_2001",
         "titolo": "Testo Unico Pubblico Impiego (TUPI)",
         "estremi": "D.Lgs. 30 marzo 2001, n. 165",
-        "descrizione": "Disciplina il rapporto di lavoro dei dipendenti delle pubbliche amministrazioni. Regola incarichi, consulenze esterne (art. 7), formazione e organizzazione degli uffici. Rilevante per determine relative a personale, incarichi professionali e formazione.",
+        "descrizione": "Disciplina il rapporto di lavoro dei dipendenti PA. Regola incarichi, consulenze esterne (art. 7), formazione e organizzazione degli uffici.",
         "articoli_chiave": ["art. 7 — gestione risorse e incarichi", "art. 19 — incarichi dirigenziali", "art. 36 — utilizzo flessibile"],
         "tags": ["personale", "consulenza", "formazione", "determina", "incarico"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-03-30;165",
@@ -85,7 +75,7 @@ NORMATIVE_DB = [
         "id": "dlgs_196_2003",
         "titolo": "Codice Privacy + GDPR",
         "estremi": "D.Lgs. 30 giugno 2003, n. 196 (mod. dal Reg. UE 2016/679)",
-        "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR (Regolamento UE 2016/679) è direttamente applicabile. Rilevante per acquisti di software, sistemi gestionali, cloud e qualsiasi trattamento dati personali da parte della PA.",
+        "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR è direttamente applicabile. Rilevante per acquisti di software, cloud e qualsiasi trattamento dati personali da parte della PA.",
         "articoli_chiave": ["art. 13 GDPR — informativa", "art. 28 GDPR — responsabile trattamento", "art. 32 GDPR — sicurezza trattamento"],
         "tags": ["privacy", "dati", "software", "cloud", "gdpr"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2003-06-30;196",
@@ -95,8 +85,8 @@ NORMATIVE_DB = [
         "id": "dlgs_81_2008",
         "titolo": "Testo Unico Sicurezza sul Lavoro",
         "estremi": "D.Lgs. 9 aprile 2008, n. 81",
-        "descrizione": "Disciplina la sicurezza e la salute nei luoghi di lavoro. Negli appalti e contratti pubblici richiede la predisposizione del DUVRI (Documento Unico Valutazione Rischi da Interferenze) e la verifica dei requisiti di sicurezza del fornitore.",
-        "articoli_chiave": ["art. 26 — obblighi connessi ai contratti d'appalto (DUVRI)", "art. 17 — obblighi non delegabili del datore di lavoro"],
+        "descrizione": "Disciplina la sicurezza nei luoghi di lavoro. Negli appalti richiede il DUVRI e la verifica dei requisiti di sicurezza del fornitore.",
+        "articoli_chiave": ["art. 26 — obblighi connessi ai contratti d'appalto (DUVRI)", "art. 17 — obblighi non delegabili"],
         "tags": ["sicurezza", "appalto", "lavori", "servizi", "contratto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2008-04-09;81",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+sicurezza+lavoro+81+2008",
@@ -105,7 +95,7 @@ NORMATIVE_DB = [
         "id": "dlgs_118_2011",
         "titolo": "Armonizzazione contabile enti locali",
         "estremi": "D.Lgs. 23 giugno 2011, n. 118",
-        "descrizione": "Disciplina i sistemi contabili e gli schemi di bilancio di Regioni, Province e Comuni. Regolamenta la corretta imputazione delle spese, gli impegni di bilancio e la copertura finanziaria degli atti di spesa della PA.",
+        "descrizione": "Disciplina i sistemi contabili e gli schemi di bilancio di Regioni, Province e Comuni. Regolamenta la corretta imputazione delle spese e gli impegni di bilancio.",
         "articoli_chiave": ["art. 56 — principi contabili applicati", "Allegato 4/2 — principio della competenza finanziaria"],
         "tags": ["bilancio", "fondo", "comune", "provincia", "determina", "acquisto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2011-06-23;118",
@@ -115,8 +105,8 @@ NORMATIVE_DB = [
         "id": "pnrr_missione1",
         "titolo": "PNRR — Missione 1: Digitalizzazione PA",
         "estremi": "Piano Nazionale di Ripresa e Resilienza, Missione 1",
-        "descrizione": "Definisce gli investimenti per la transizione digitale della PA. Gli acquisti ICT finanziati dal PNRR devono rispettare le linee guida AgID, i requisiti cloud e le condizioni di interoperabilità. Rilevante per determine su acquisti software, cloud e infrastrutture IT.",
-        "articoli_chiave": ["Componente 1.1 — Infrastrutture digitali", "Componente 1.2 — Abilitazione e facilitazione migrazione al cloud"],
+        "descrizione": "Definisce gli investimenti per la transizione digitale della PA. Gli acquisti ICT finanziati dal PNRR devono rispettare le linee guida AgID e i requisiti cloud.",
+        "articoli_chiave": ["Componente 1.1 — Infrastrutture digitali", "Componente 1.2 — Abilitazione migrazione al cloud"],
         "tags": ["pnrr", "cloud", "software", "digitalizzazione", "agid", "fondo"],
         "url_normattiva": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
@@ -125,26 +115,21 @@ NORMATIVE_DB = [
         "id": "l_136_2010",
         "titolo": "Tracciabilità dei flussi finanziari (CIG/CUP)",
         "estremi": "L. 13 agosto 2010, n. 136",
-        "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti correnti dedicati e a effettuare tutti i movimenti finanziari tramite strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG (Codice Identificativo Gara) e, se finanziato con fondi pubblici, il CUP. La mancata indicazione del CIG nelle determine costituisce violazione.",
-        "articoli_chiave": [
-            "art. 3 — obblighi di tracciabilità dei flussi finanziari",
-            "art. 3 co. 5 — obbligo CIG e CUP",
-            "art. 6 — sanzioni per violazione tracciabilità",
-        ],
+        "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti dedicati e strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG e, se finanziato con fondi pubblici, il CUP. La mancata indicazione nelle determine costituisce violazione.",
+        "articoli_chiave": ["art. 3 — obblighi di tracciabilità dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilità"],
         "tags": ["cig", "cup", "tracciabilità", "acquisto", "appalto", "fornitore", "contratto", "determina", "gara", "rup"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
 ]
 
-# Indici
+# Indice tag → norm_id
 TAG_INDEX: dict = {}
 for _n in NORMATIVE_DB:
     for _t in _n["tags"]:
         TAG_INDEX.setdefault(_t, []).append(_n["id"])
 NORME_BY_ID = {n["id"]: n for n in NORMATIVE_DB}
 
-# ── Tipo atto e mappa semantica ───────────────────────────────────────────────
 TIPO_ATTO_TAGS = {
     "determina":  ["determina", "acquisto", "cig"],
     "delibera":   ["delibera", "comune"],
@@ -208,7 +193,7 @@ STOP_WORDS = {
 }
 
 
-# ── Importo ───────────────────────────────────────────────────────────────────
+# ── Motore tag (pre-filtro) ────────────────────────────────────────────────────
 def _importo_tags(importo_str: str) -> list:
     try:
         val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
@@ -239,12 +224,12 @@ def _importo_label(importo_str: str) -> str:
         return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
-# ── Motore tag (pre-filtro) ───────────────────────────────────────────────────
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
-    matched_ids: dict = {}
+    """Pre-filtro: restituisce norme candidate ordinate per score tag."""
+    matched: dict = {}
 
-    def _add(norm_id: str, score: int = 1):
-        matched_ids[norm_id] = matched_ids.get(norm_id, 0) + score
+    def _add(nid, score=1):
+        matched[nid] = matched.get(nid, 0) + score
 
     if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
         for tag in TIPO_ATTO_TAGS[tipo_atto.lower()]:
@@ -267,108 +252,98 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
             for nid in TAG_INDEX.get(sem_tag, []):
                 _add(nid, 1)
 
-    sorted_ids = sorted(matched_ids.items(), key=lambda x: x[1], reverse=True)
+    sorted_ids = sorted(matched.items(), key=lambda x: x[1], reverse=True)
     results = []
     for nid, score in sorted_ids:
         norma = NORME_BY_ID[nid].copy()
         norma["score"] = score
-        norma["ai_motivazione"] = None
+        norma["ai_motivation"] = ""
         results.append(norma)
     return results
 
 
-# ── Gemini ranking ────────────────────────────────────────────────────────────
-def _gemini_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidates: list) -> list:
-    """Chiama Gemini Flash per riordinare i candidati e aggiungere motivazioni.
-    Ritorna la lista arricchita oppure i candidati originali in caso di errore."""
-    if not _GEMINI_AVAILABLE or not GEMINI_API_KEY:
-        return candidates
-
-    # Costruisce il catalogo compatto da passare al prompt
-    catalog_lines = []
-    for c in candidates:
-        catalog_lines.append(
-            f"- ID: {c['id']} | {c['estremi']} | {c['titolo']}: {c['descrizione'][:120]}..."
-        )
-    catalog_text = "\n".join(catalog_lines)
-
-    prompt = f"""Sei un esperto di diritto amministrativo italiano.
-Un funzionario pubblico deve redigere il seguente atto:
-
-Tipo atto: {tipo_atto or 'non specificato'}
-Oggetto: {oggetto or 'non specificato'}
-Importo: {importo or 'non specificato'}
-Descrizione esigenza: {testo}
-
-Ho pre-selezionato le seguenti norme di riferimento dal database:
-{catalog_text}
-
-Istruzioni:
-1. Seleziona SOLO le norme realmente applicabili a questo caso specifico (escludi quelle non pertinenti).
-2. Ordinale dalla più rilevante alla meno rilevante.
-3. Per ciascuna norma selezionata, scrivi una motivazione breve (max 2 frasi) in italiano che spieghi PERCHÉ è applicabile a questo caso concreto.
-4. Rispondi ESCLUSIVAMENTE con un oggetto JSON valido, senza markdown, senza backtick, senza testo aggiuntivo.
-
-Formato risposta:
-{{"ranking": [{{"id": "id_norma", "motivazione": "testo motivazione"}}]}}"""
+# ── Gemini ranking ─────────────────────────────────────────────────────────────
+def _gemini_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
+                 candidates: list) -> list:
+    """
+    Chiama Gemini Flash per riordinare i candidati e aggiungere motivazione.
+    Restituisce la lista arricchita, o i candidati originali in caso di errore.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return candidates  # fallback silenzioso
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        # Costruzione prompt
+        norme_list = "\n".join(
+            f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
+            for n in candidates
+        )
+        importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
+        prompt = f"""Sei un esperto di diritto amministrativo italiano.
+Un funzionario della PA deve redigere il seguente atto:
+- Tipo atto: {tipo_atto or 'non specificato'}
+- Oggetto: {oggetto or 'non specificato'}
+- {importo_info}
+- Descrizione esigenza: {testo}
+
+Queste sono le norme candidate trovate dal sistema:
+{norme_list}
+
+Restituisci SOLO un oggetto JSON valido (nessun testo prima o dopo) con questa struttura:
+{{
+  "ranked": [
+    {{"id": "<id_norma>", "motivation": "<1-2 frasi in italiano: perché questa norma è rilevante per questo specifico atto>"}},
+    ...
+  ]
+}}
+Ordina dalla più rilevante alla meno rilevante. Includi solo le norme che sono effettivamente applicabili. Ometti quelle non pertinenti."""
+
         response = model.generate_content(
             prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.1,
-                max_output_tokens=1024,
-            ),
+            generation_config={"temperature": 0.1, "max_output_tokens": 1024},
         )
         raw = response.text.strip()
-        # Pulizia robusta: rimuove eventuali backtick residui
+        # Estrai JSON anche se Gemini aggiunge backtick
         if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1]
-        if raw.endswith("```"):
-            raw = raw.rsplit("```", 1)[0]
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
         data = json.loads(raw)
-        ranking = data.get("ranking", [])
+        ranked_ids = {item["id"]: item["motivation"] for item in data.get("ranked", [])}
 
-        # Ricostruisce la lista nell'ordine Gemini, aggiungendo motivazione
-        id_to_candidate = {c["id"]: c for c in candidates}
-        enriched = []
-        for item in ranking:
-            nid = item.get("id", "")
-            if nid in id_to_candidate:
-                norma = id_to_candidate[nid].copy()
-                norma["ai_motivazione"] = item.get("motivazione", "")
-                enriched.append(norma)
-
-        # Aggiunge eventuali norme non restituite da Gemini (senza motivazione) in fondo
-        returned_ids = {item.get("id") for item in ranking}
-        for c in candidates:
-            if c["id"] not in returned_ids:
-                norma = c.copy()
-                norma["ai_motivazione"] = None
-                enriched.append(norma)
-
-        return enriched if enriched else candidates
+        # Ricostruisce lista rispettando ordine Gemini
+        by_id = {n["id"]: n for n in candidates}
+        result = []
+        for item in data.get("ranked", []):
+            nid = item["id"]
+            if nid in by_id:
+                norma = by_id[nid].copy()
+                norma["ai_motivation"] = item.get("motivation", "")
+                result.append(norma)
+        # Aggiunge eventuali norme non restituite da Gemini in fondo
+        ranked_set = set(ranked_ids.keys())
+        for n in candidates:
+            if n["id"] not in ranked_set:
+                n["ai_motivation"] = ""
+                result.append(n)
+        return result
 
     except Exception:
-        # Fallback silenzioso: restituisce i candidati originali senza ranking AI
+        # Qualsiasi errore → fallback motore classico
         return candidates
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ────────────────────────────────────────────────────────────────
 def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
-    # 1. Pre-filtro con motore tag
     candidates = _tag_search(testo, tipo_atto, oggetto, importo)
+    results = _gemini_rank(testo, tipo_atto, oggetto, importo, candidates)
 
-    # 2. Ranking e motivazioni con Gemini (solo se ci sono candidati)
-    ai_active = bool(_GEMINI_AVAILABLE and GEMINI_API_KEY)
-    if candidates and ai_active:
-        results = _gemini_rank(testo, tipo_atto, oggetto, importo, candidates)
-    else:
-        results = candidates
-
-    # Keywords estratte
+    # Keywords per frontend
     full_text = f"{testo} {oggetto}".lower()
     tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
     kw_set = set()
@@ -379,16 +354,18 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
         ):
             kw_set.add(token)
 
+    ai_active = bool(os.environ.get("GEMINI_API_KEY", ""))
+
     return {
         "keywords": list(kw_set)[:10],
         "importo_label": _importo_label(importo) if importo else "",
-        "ai_active": ai_active,
         "results": results,
         "total": len(results),
+        "ai_active": ai_active,
     }
 
 
-# ── Handler Vercel ────────────────────────────────────────────────────────────
+# ── Handler Vercel ─────────────────────────────────────────────────────────────
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
