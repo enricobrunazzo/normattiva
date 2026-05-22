@@ -1,8 +1,9 @@
-"""Endpoint /api/search — ricerca normativa PA con ranking Gemini."""
+"""Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama."""
 from http.server import BaseHTTPRequestHandler
 import json
 import os
 import urllib.parse
+import urllib.request
 
 # ── Soglie D.Lgs. 36/2023 ─────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
@@ -262,75 +263,88 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
     return results
 
 
-# ── Gemini ranking ─────────────────────────────────────────────────────────────
-def _gemini_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
-                 candidates: list) -> list:
+# ── Groq ranking (Llama 3.3 70B — free tier) ──────────────────────────────────
+def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
+               candidates: list) -> list:
     """
-    Chiama Gemini Flash per riordinare i candidati e aggiungere motivazione.
+    Chiama Groq (Llama 3.3 70B) per riordinare i candidati e aggiungere motivazione.
+    Free tier: 14.400 req/giorno, nessuna carta di credito.
+    Usa solo urllib della stdlib — zero dipendenze esterne.
     Restituisce la lista arricchita, o i candidati originali in caso di errore.
     """
-    api_key = os.environ.get("GEMINI_API_KEY", "")
+    api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        return candidates  # fallback silenzioso
+        return candidates
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
-        # Costruzione prompt
         norme_list = "\n".join(
             f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             for n in candidates
         )
         importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
-        prompt = f"""Sei un esperto di diritto amministrativo italiano.
-Un funzionario della PA deve redigere il seguente atto:
-- Tipo atto: {tipo_atto or 'non specificato'}
-- Oggetto: {oggetto or 'non specificato'}
-- {importo_info}
-- Descrizione esigenza: {testo}
-
-Queste sono le norme candidate trovate dal sistema:
-{norme_list}
-
-Restituisci SOLO un oggetto JSON valido (nessun testo prima o dopo) con questa struttura:
-{{
-  "ranked": [
-    {{"id": "<id_norma>", "motivation": "<1-2 frasi in italiano: perché questa norma è rilevante per questo specifico atto>"}},
-    ...
-  ]
-}}
-Ordina dalla più rilevante alla meno rilevante. Includi solo le norme che sono effettivamente applicabili. Ometti quelle non pertinenti."""
-
-        response = model.generate_content(
-            prompt,
-            generation_config={"temperature": 0.1, "max_output_tokens": 1024},
+        prompt = (
+            "Sei un esperto di diritto amministrativo italiano.\n"
+            "Un funzionario della PA deve redigere il seguente atto:\n"
+            f"- Tipo atto: {tipo_atto or 'non specificato'}\n"
+            f"- Oggetto: {oggetto or 'non specificato'}\n"
+            f"- {importo_info}\n"
+            f"- Descrizione esigenza: {testo}\n\n"
+            "Queste sono le norme candidate trovate dal sistema:\n"
+            f"{norme_list}\n\n"
+            "Restituisci SOLO un oggetto JSON valido (nessun testo prima o dopo) con questa struttura:\n"
+            "{\n"
+            '  "ranked": [\n'
+            '    {"id": "<id_norma>", "motivation": "<1-2 frasi in italiano: perché questa norma è rilevante per questo specifico atto>"},\n'
+            "    ...\n"
+            "  ]\n"
+            "}\n"
+            "Ordina dalla più rilevante alla meno rilevante. "
+            "Includi solo le norme effettivamente applicabili. Ometti quelle non pertinenti."
         )
-        raw = response.text.strip()
-        # Estrai JSON anche se Gemini aggiunge backtick
+
+        payload = json.dumps({
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": 1024,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        resp = urllib.request.urlopen(req, timeout=20)
+        data = json.loads(resp.read().decode("utf-8"))
+        raw = data["choices"][0]["message"]["content"].strip()
+
+        # Estrai JSON anche se il modello aggiunge backtick
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        data = json.loads(raw)
-        ranked_ids = {item["id"]: item["motivation"] for item in data.get("ranked", [])}
+        ranked_data = json.loads(raw)
 
-        # Ricostruisce lista rispettando ordine Gemini
         by_id = {n["id"]: n for n in candidates}
         result = []
-        for item in data.get("ranked", []):
+        ranked_ids = set()
+        for item in ranked_data.get("ranked", []):
             nid = item["id"]
             if nid in by_id:
                 norma = by_id[nid].copy()
                 norma["ai_motivation"] = item.get("motivation", "")
                 result.append(norma)
-        # Aggiunge eventuali norme non restituite da Gemini in fondo
-        ranked_set = set(ranked_ids.keys())
+                ranked_ids.add(nid)
+
+        # Aggiunge eventuali norme non restituite dal modello in fondo
         for n in candidates:
-            if n["id"] not in ranked_set:
+            if n["id"] not in ranked_ids:
                 n["ai_motivation"] = ""
                 result.append(n)
+
         return result
 
     except Exception:
@@ -341,7 +355,7 @@ Ordina dalla più rilevante alla meno rilevante. Includi solo le norme che sono 
 # ── Entry point ────────────────────────────────────────────────────────────────
 def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
     candidates = _tag_search(testo, tipo_atto, oggetto, importo)
-    results = _gemini_rank(testo, tipo_atto, oggetto, importo, candidates)
+    results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates)
 
     # Keywords per frontend
     full_text = f"{testo} {oggetto}".lower()
@@ -354,7 +368,7 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
         ):
             kw_set.add(token)
 
-    ai_active = bool(os.environ.get("GEMINI_API_KEY", ""))
+    ai_active = bool(os.environ.get("GROQ_API_KEY", ""))
 
     return {
         "keywords": list(kw_set)[:10],
