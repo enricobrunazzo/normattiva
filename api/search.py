@@ -28,7 +28,6 @@ DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
 # ── Numero massimo di candidati passati a Groq ────────────────────────────────
-# Limita il payload e garantisce che max_tokens sia sufficiente per tutte le motivazioni
 GROQ_MAX_CANDIDATES = 8
 
 # ── Database normativo locale ──────────────────────────────────────────────────
@@ -215,12 +214,21 @@ STOP_WORDS = {
 }
 
 
-# ── Motore tag (pre-filtro) ────────────────────────────────────────────────────
-def _importo_tags(importo_str: str) -> list:
+# ── Helpers importo ────────────────────────────────────────────────────────────
+def _parse_importo(importo_str: str) -> float | None:
     try:
-        val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
+        return float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
     except (ValueError, AttributeError):
+        return None
+
+
+def _importo_tags(importo_str: str, convenzione: bool = False) -> list:
+    val = _parse_importo(importo_str)
+    if val is None:
         return []
+    # In convenzione il tag-engine privilegia mepa/consip invece di gara/appalto
+    if convenzione:
+        return ["acquisto", "mepa", "consip", "cig"]
     if val <= SEMI_THRESHOLD:
         return ["acquisto"]
     elif val <= DIRECT_THRESHOLD:
@@ -231,11 +239,15 @@ def _importo_tags(importo_str: str) -> list:
         return ["appalto", "gara", "lavori", "cig"]
 
 
-def _importo_label(importo_str: str) -> str:
-    try:
-        val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
-    except (ValueError, AttributeError):
+def _importo_label(importo_str: str, convenzione: bool = False) -> str:
+    val = _parse_importo(importo_str)
+    if val is None:
         return ""
+    if convenzione:
+        return (
+            f"€{val:,.0f} — Adesione a convenzione Consip / Ordine su MEPA "
+            f"(art. 1 co. 449 L. 296/2006 e art. 26 L. 488/1999)"
+        )
     if val <= SEMI_THRESHOLD:
         return f"€{val:,.0f} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
     elif val <= DIRECT_THRESHOLD:
@@ -246,7 +258,9 @@ def _importo_label(importo_str: str) -> str:
         return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
-def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
+# ── Motore tag (pre-filtro) ────────────────────────────────────────────────────
+def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
+                convenzione: bool = False) -> list:
     """Pre-filtro: restituisce norme candidate ordinate per score tag."""
     matched: dict = {}
 
@@ -258,7 +272,7 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
             for nid in TAG_INDEX.get(tag, []):
                 _add(nid, 2)
 
-    for tag in _importo_tags(importo):
+    for tag in _importo_tags(importo, convenzione):
         for nid in TAG_INDEX.get(tag, []):
             _add(nid, 3)
 
@@ -273,6 +287,12 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
         for sem_tag in SEMANTIC_MAP.get(token, []):
             for nid in TAG_INDEX.get(sem_tag, []):
                 _add(nid, 1)
+
+    # Se convenzione, boost esplicito su tracciabilità e trasparenza
+    if convenzione:
+        for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000"):
+            if boost_id in NORME_BY_ID:
+                _add(boost_id, 4)
 
     sorted_ids = sorted(matched.items(), key=lambda x: x[1], reverse=True)
     results = []
@@ -307,18 +327,17 @@ def _extract_json(raw: str) -> dict:
 
 # ── Groq ranking (Llama 3.3 70B — free tier) ──────────────────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
-               candidates: list) -> list:
+               candidates: list, convenzione: bool = False) -> list:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         print("[GROQ] SKIP — GROQ_API_KEY assente a runtime", flush=True)
         return candidates
 
-    # Limita i candidati passati a Groq per garantire motivazioni complete
     groq_candidates = candidates[:GROQ_MAX_CANDIDATES]
     remaining = candidates[GROQ_MAX_CANDIDATES:]
 
     key_preview = f"{api_key[:8]}...{api_key[-4:]}"
-    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)})", flush=True)
+    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)}) | convenzione={convenzione}", flush=True)
     t0 = time.time()
 
     try:
@@ -327,18 +346,27 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             for n in groq_candidates
         )
         importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
+
+        # Riga contestuale aggiuntiva se è una convenzione
+        convenzione_info = (
+            "- Modalità di acquisto: CONVENZIONE CONSIP / ORDINE SU MEPA "
+            "(non è richiesta gara autonoma; la procedura è già assolta dalla convenzione quadro)\n"
+            if convenzione else ""
+        )
+
         prompt = (
             "Sei un esperto di diritto amministrativo italiano.\n"
             "Un funzionario della PA deve redigere il seguente atto:\n"
             f"- Tipo atto: {tipo_atto or 'non specificato'}\n"
             f"- Oggetto: {oggetto or 'non specificato'}\n"
             f"- {importo_info}\n"
+            f"{convenzione_info}"
             f"- Descrizione esigenza: {testo}\n\n"
             "Queste sono le norme candidate trovate dal sistema:\n"
             f"{norme_list}\n\n"
             "Restituisci un oggetto JSON con questa struttura:\n"
-            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi perch\u00e8 rilevante>\"}]}\n"
-            "Ordina dalla pi\u00f9 rilevante alla meno rilevante. "
+            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi perché rilevante>\"}]}\n"
+            "Ordina dalla più rilevante alla meno rilevante. "
             "Includi TUTTE le norme elencate, anche quelle meno pertinenti (motivation breve). "
             "Non omettere nessuna norma dalla lista."
         )
@@ -382,13 +410,11 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 result.append(norma)
                 ranked_ids.add(nid)
 
-        # Aggiungi eventuali norme di groq_candidates non restituite dal modello
         for n in groq_candidates:
             if n["id"] not in ranked_ids:
                 n["ai_motivation"] = ""
                 result.append(n)
 
-        # Appendi le norme oltre il cap (senza motivazione AI)
         for n in remaining:
             n["ai_motivation"] = ""
             result.append(n)
@@ -413,9 +439,10 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
-def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
-    candidates = _tag_search(testo, tipo_atto, oggetto, importo)
-    results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates)
+def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "",
+               importo: str = "", convenzione: bool = False) -> dict:
+    candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione)
+    results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
     full_text = f"{testo} {oggetto}".lower()
     tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
@@ -431,7 +458,8 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
 
     return {
         "keywords": list(kw_set)[:10],
-        "importo_label": _importo_label(importo) if importo else "",
+        "importo_label": _importo_label(importo, convenzione) if importo else "",
+        "convenzione": convenzione,
         "results": results,
         "total": len(results),
         "ai_active": ai_active,
@@ -446,14 +474,17 @@ class handler(BaseHTTPRequestHandler):
         try:
             parsed = urllib.parse.urlparse(self.path)
             params = urllib.parse.parse_qs(parsed.query)
-            testo     = params.get("testo",     [""])[0].strip()
-            tipo_atto = params.get("tipo_atto", [""])[0].strip()
-            oggetto   = params.get("oggetto",   [""])[0].strip()
-            importo   = params.get("importo",   [""])[0].strip()
+            testo       = params.get("testo",       [""])[0].strip()
+            tipo_atto   = params.get("tipo_atto",   [""])[0].strip()
+            oggetto     = params.get("oggetto",     [""])[0].strip()
+            importo     = params.get("importo",     [""])[0].strip()
+            # convenzione=true oppure convenzione=1
+            conv_raw    = params.get("convenzione", [""])[0].strip().lower()
+            convenzione = conv_raw in ("true", "1", "yes", "si", "sì")
 
             print(
                 f"[REQUEST] testo={testo[:40]!r} tipo_atto={tipo_atto!r} "
-                f"oggetto={oggetto[:40]!r} importo={importo!r} "
+                f"oggetto={oggetto[:40]!r} importo={importo!r} convenzione={convenzione} "
                 f"groq_key_present={bool(os.environ.get('GROQ_API_KEY', ''))}",
                 flush=True,
             )
@@ -461,7 +492,7 @@ class handler(BaseHTTPRequestHandler):
             if not testo and not oggetto:
                 self._send_json({"error": "Inserisci almeno una descrizione o un oggetto"}, 400)
                 return
-            data = find_norme(testo, tipo_atto, oggetto, importo)
+            data = find_norme(testo, tipo_atto, oggetto, importo, convenzione)
             elapsed_ms = int((time.time() - t_start) * 1000)
             print(f"[REQUEST] completed in {elapsed_ms}ms | ai_active={data['ai_active']}", flush=True)
             self._send_json(data)
@@ -480,7 +511,8 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self._cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(len(body))
+        )
         self.end_headers()
         self.wfile.write(body)
 
