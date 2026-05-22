@@ -28,7 +28,7 @@ DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
 # ── Numero massimo di candidati passati a Groq ────────────────────────────────
-GROQ_MAX_CANDIDATES = 8
+GROQ_MAX_CANDIDATES = 15
 
 # ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
