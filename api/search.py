@@ -1,15 +1,25 @@
-"""Endpoint /api/search — ricerca normativa PA."""
+"""Endpoint /api/search — ricerca normativa PA con ranking Gemini Flash."""
 from http.server import BaseHTTPRequestHandler
 import json
+import os
 import urllib.parse
 
-# ── Soglie D.Lgs. 36/2023 ──────────────────────────────────────────────────────────
+# ── Gemini ────────────────────────────────────────────────────────────────────
+try:
+    import google.generativeai as genai
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    _GEMINI_AVAILABLE = False
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL   = "gemini-1.5-flash-latest"
+
+# ── Soglie D.Lgs. 36/2023 ────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
-# ── Database normativo locale ─────────────────────────────────────────────────────────
-# Ogni norma ha: id, titolo, estremi, descrizione, tags, url_normattiva, url_ricerca
+# ── Database normativo locale ─────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
         "id": "dlgs_36_2023",
@@ -45,7 +55,7 @@ NORMATIVE_DB = [
         "id": "l_190_2012",
         "titolo": "Legge Anticorruzione",
         "estremi": "L. 6 novembre 2012, n. 190",
-        "descrizione": "Introduce misure per la prevenzione e la repressione della corruzione nella PA. Obbliga gli enti a dotarsi di Piano Triennale di Prevenzione della Corruzione (PTPCT). Impone obblighi di rotazione del personale e limitazioni agli affidamenti diretti reiterati. L'art. 1 co. 41 richiede l'attestazione di assenza di conflitto d'interessi in ogni provvedimento.",
+        "descrizione": "Introduce misure per la prevenzione e la repressione della corruzione nella PA. Obbliga gli enti a dotarsi di Piano Triennale di Prevenzione della Corruzione (PTPCT). L'art. 1 co. 41 impone l'attestazione di assenza di conflitto d'interessi in ogni provvedimento.",
         "articoli_chiave": ["art. 1 — PTPCT", "art. 1 co. 9 — misure obbligatorie", "art. 1 co. 41 — conflitto d'interessi"],
         "tags": ["anticorruzione", "trasparenza", "acquisto", "appalto", "determina", "conflitto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2012-11-06;190",
@@ -111,12 +121,11 @@ NORMATIVE_DB = [
         "url_normattiva": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
     },
-    # ── NUOVA: L. 136/2010 — Tracciabilità flussi finanziari ──────────────────────
     {
         "id": "l_136_2010",
         "titolo": "Tracciabilità dei flussi finanziari (CIG/CUP)",
         "estremi": "L. 13 agosto 2010, n. 136",
-        "descrizione": "Obbliga le stazioni appaltanti e i soggetti aggiudicatari a utilizzare conti correnti bancari o postali dedicati alle commesse pubbliche e a effettuare tutti i movimenti finanziari tramite strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG (Codice Identificativo Gara) e, se finanziato con fondi pubblici nazionali/UE, il CUP (Codice Unico di Progetto). La mancata indicazione del CIG/CUP nelle determine di affidamento costituisce violazione.",
+        "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti correnti dedicati e a effettuare tutti i movimenti finanziari tramite strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG (Codice Identificativo Gara) e, se finanziato con fondi pubblici, il CUP. La mancata indicazione del CIG nelle determine costituisce violazione.",
         "articoli_chiave": [
             "art. 3 — obblighi di tracciabilità dei flussi finanziari",
             "art. 3 co. 5 — obbligo CIG e CUP",
@@ -128,15 +137,14 @@ NORMATIVE_DB = [
     },
 ]
 
-# Mappa tag → norma, costruita dal DB
+# Indici
 TAG_INDEX: dict = {}
 for _n in NORMATIVE_DB:
     for _t in _n["tags"]:
         TAG_INDEX.setdefault(_t, []).append(_n["id"])
-
 NORME_BY_ID = {n["id"]: n for n in NORMATIVE_DB}
 
-# ── Costanti tipo atto ────────────────────────────────────────────────────────────
+# ── Tipo atto e mappa semantica ───────────────────────────────────────────────
 TIPO_ATTO_TAGS = {
     "determina":  ["determina", "acquisto", "cig"],
     "delibera":   ["delibera", "comune"],
@@ -180,7 +188,6 @@ SEMANTIC_MAP = {
     "abbonamento":   ["software", "acquisto"],
     "saas":          ["software", "cloud", "privacy"],
     "agid":          ["software", "cloud", "pnrr"],
-    # nuovi
     "cig":           ["cig", "acquisto", "appalto"],
     "cup":           ["cup", "cig", "pnrr"],
     "tracciabilita": ["cig", "tracciabilità"],
@@ -201,7 +208,7 @@ STOP_WORDS = {
 }
 
 
-# ── Logica di ricerca ───────────────────────────────────────────────────────────
+# ── Importo ───────────────────────────────────────────────────────────────────
 def _importo_tags(importo_str: str) -> list:
     try:
         val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
@@ -232,47 +239,138 @@ def _importo_label(importo_str: str) -> str:
         return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
-def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
-    matched_ids: dict = {}  # id -> score
+# ── Motore tag (pre-filtro) ───────────────────────────────────────────────────
+def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
+    matched_ids: dict = {}
 
     def _add(norm_id: str, score: int = 1):
         matched_ids[norm_id] = matched_ids.get(norm_id, 0) + score
 
-    # 1. Tipo atto
     if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
         for tag in TIPO_ATTO_TAGS[tipo_atto.lower()]:
             for nid in TAG_INDEX.get(tag, []):
                 _add(nid, 2)
 
-    # 2. Importo
     for tag in _importo_tags(importo):
         for nid in TAG_INDEX.get(tag, []):
-            _add(nid, 3)  # importo molto rilevante
+            _add(nid, 3)
 
-    # 3. Analisi semantica testo + oggetto
     full_text = f"{testo} {oggetto}".lower()
     tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
     for token in tokens:
         token = token.strip("'\"()[]")
         if token in STOP_WORDS or len(token) < 4:
             continue
-        # Match diretto nei tag
         for nid in TAG_INDEX.get(token, []):
             _add(nid, 2)
-        # Match da mappa semantica
         for sem_tag in SEMANTIC_MAP.get(token, []):
             for nid in TAG_INDEX.get(sem_tag, []):
                 _add(nid, 1)
 
-    # Ordina per score decrescente
     sorted_ids = sorted(matched_ids.items(), key=lambda x: x[1], reverse=True)
     results = []
     for nid, score in sorted_ids:
         norma = NORME_BY_ID[nid].copy()
         norma["score"] = score
+        norma["ai_motivazione"] = None
         results.append(norma)
+    return results
 
-    # Keywords estratte per il frontend
+
+# ── Gemini ranking ────────────────────────────────────────────────────────────
+def _gemini_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidates: list) -> list:
+    """Chiama Gemini Flash per riordinare i candidati e aggiungere motivazioni.
+    Ritorna la lista arricchita oppure i candidati originali in caso di errore."""
+    if not _GEMINI_AVAILABLE or not GEMINI_API_KEY:
+        return candidates
+
+    # Costruisce il catalogo compatto da passare al prompt
+    catalog_lines = []
+    for c in candidates:
+        catalog_lines.append(
+            f"- ID: {c['id']} | {c['estremi']} | {c['titolo']}: {c['descrizione'][:120]}..."
+        )
+    catalog_text = "\n".join(catalog_lines)
+
+    prompt = f"""Sei un esperto di diritto amministrativo italiano.
+Un funzionario pubblico deve redigere il seguente atto:
+
+Tipo atto: {tipo_atto or 'non specificato'}
+Oggetto: {oggetto or 'non specificato'}
+Importo: {importo or 'non specificato'}
+Descrizione esigenza: {testo}
+
+Ho pre-selezionato le seguenti norme di riferimento dal database:
+{catalog_text}
+
+Istruzioni:
+1. Seleziona SOLO le norme realmente applicabili a questo caso specifico (escludi quelle non pertinenti).
+2. Ordinale dalla più rilevante alla meno rilevante.
+3. Per ciascuna norma selezionata, scrivi una motivazione breve (max 2 frasi) in italiano che spieghi PERCHÉ è applicabile a questo caso concreto.
+4. Rispondi ESCLUSIVAMENTE con un oggetto JSON valido, senza markdown, senza backtick, senza testo aggiuntivo.
+
+Formato risposta:
+{{"ranking": [{{"id": "id_norma", "motivazione": "testo motivazione"}}]}}"""
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=1024,
+            ),
+        )
+        raw = response.text.strip()
+        # Pulizia robusta: rimuove eventuali backtick residui
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        data = json.loads(raw)
+        ranking = data.get("ranking", [])
+
+        # Ricostruisce la lista nell'ordine Gemini, aggiungendo motivazione
+        id_to_candidate = {c["id"]: c for c in candidates}
+        enriched = []
+        for item in ranking:
+            nid = item.get("id", "")
+            if nid in id_to_candidate:
+                norma = id_to_candidate[nid].copy()
+                norma["ai_motivazione"] = item.get("motivazione", "")
+                enriched.append(norma)
+
+        # Aggiunge eventuali norme non restituite da Gemini (senza motivazione) in fondo
+        returned_ids = {item.get("id") for item in ranking}
+        for c in candidates:
+            if c["id"] not in returned_ids:
+                norma = c.copy()
+                norma["ai_motivazione"] = None
+                enriched.append(norma)
+
+        return enriched if enriched else candidates
+
+    except Exception:
+        # Fallback silenzioso: restituisce i candidati originali senza ranking AI
+        return candidates
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
+    # 1. Pre-filtro con motore tag
+    candidates = _tag_search(testo, tipo_atto, oggetto, importo)
+
+    # 2. Ranking e motivazioni con Gemini (solo se ci sono candidati)
+    ai_active = bool(_GEMINI_AVAILABLE and GEMINI_API_KEY)
+    if candidates and ai_active:
+        results = _gemini_rank(testo, tipo_atto, oggetto, importo, candidates)
+    else:
+        results = candidates
+
+    # Keywords estratte
+    full_text = f"{testo} {oggetto}".lower()
+    tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
     kw_set = set()
     for token in tokens:
         token = token.strip("'\"()[]")
@@ -280,19 +378,17 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
             token in TAG_INDEX or token in SEMANTIC_MAP
         ):
             kw_set.add(token)
-    keywords = list(kw_set)[:10]
-
-    importo_label = _importo_label(importo) if importo else ""
 
     return {
-        "keywords": keywords,
-        "importo_label": importo_label,
+        "keywords": list(kw_set)[:10],
+        "importo_label": _importo_label(importo) if importo else "",
+        "ai_active": ai_active,
         "results": results,
         "total": len(results),
     }
 
 
-# ── Handler Vercel ─────────────────────────────────────────────────────────────
+# ── Handler Vercel ────────────────────────────────────────────────────────────
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
