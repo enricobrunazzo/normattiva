@@ -1,1 +1,3 @@
-google-generativeai>=0.7.0
+# Nessuna dipendenza esterna richiesta.
+# Il backend usa solo la stdlib Python (urllib, json, os).
+# Groq API viene chiamata direttamente via urllib.request.
