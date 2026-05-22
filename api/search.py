@@ -28,7 +28,12 @@ DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
 # ── Numero massimo di candidati passati a Groq ────────────────────────────────
-GROQ_MAX_CANDIDATES = 15
+# Pool ridotto: scelte più nette, prompt più corto, meno "rumore" per il modello
+GROQ_MAX_CANDIDATES = 8
+
+# ── Score minimo per entrare nel pool Groq ────────────────────────────────────
+# Norme con score < 4 sono marginali e non vengono inviate a Groq
+MIN_SCORE_FOR_GROQ = 4
 
 # ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
@@ -58,7 +63,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 14 marzo 2013, n. 33",
         "descrizione": "Obbliga le PA alla pubblicazione su 'Amministrazione Trasparente' di dati su contratti, affidamenti e spese. Ogni determina di acquisto rilevante deve essere pubblicata. Disciplina anche il FOIA (art. 5).",
         "articoli_chiave": ["art. 23 — obblighi pubblicazione provvedimenti", "art. 37 — pubblicazione contratti e appalti", "art. 5 — accesso civico"],
-        "tags": ["trasparenza", "acquisto", "appalto", "determina", "delibera", "anticorruzione"],
+        "tags": ["trasparenza", "anticorruzione"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2013-03-14;33",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+33+2013+trasparenza+amministrativa",
     },
@@ -68,7 +73,7 @@ NORMATIVE_DB = [
         "estremi": "L. 6 novembre 2012, n. 190",
         "descrizione": "Introduce misure per la prevenzione della corruzione nella PA. Obbliga gli enti al PTPCT. L'art. 1 co. 41 richiede l'attestazione di assenza di conflitto d'interessi in ogni provvedimento.",
         "articoli_chiave": ["art. 1 — PTPCT", "art. 1 co. 9 — misure obbligatorie", "art. 1 co. 41 — conflitto d'interessi"],
-        "tags": ["anticorruzione", "trasparenza", "acquisto", "appalto", "determina", "conflitto"],
+        "tags": ["anticorruzione", "trasparenza", "conflitto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2012-11-06;190",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+190+2012+anticorruzione",
     },
@@ -78,7 +83,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 18 agosto 2000, n. 267",
         "descrizione": "Disciplina l'organizzazione di Comuni e Province. Regolamenta competenze degli organi, forma degli atti (delibere, determine) e gestione finanziaria. Riferimento primario per ogni atto amministrativo di ente locale.",
         "articoli_chiave": ["art. 107 — competenze dirigenziali", "art. 192 — determinazione a contrarre", "art. 183 — assunzione impegno di spesa"],
-        "tags": ["comune", "provincia", "determina", "delibera", "ordinanza", "acquisto", "appalto", "bilancio"],
+        "tags": ["comune", "provincia", "delibera", "ordinanza", "bilancio"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2000-08-18;267",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+enti+locali+TUEL+267+2000",
     },
@@ -88,7 +93,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 30 marzo 2001, n. 165",
         "descrizione": "Disciplina il rapporto di lavoro dei dipendenti PA. Regola incarichi, consulenze esterne (art. 7), formazione e organizzazione degli uffici.",
         "articoli_chiave": ["art. 7 — gestione risorse e incarichi", "art. 19 — incarichi dirigenziali", "art. 36 — utilizzo flessibile"],
-        "tags": ["personale", "consulenza", "formazione", "determina", "incarico"],
+        "tags": ["personale", "consulenza", "formazione", "incarico"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-03-30;165",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+pubblico+impiego+165+2001",
     },
@@ -98,7 +103,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 30 giugno 2003, n. 196 (mod. dal Reg. UE 2016/679)",
         "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR è direttamente applicabile. Rilevante per acquisti di software, cloud e qualsiasi trattamento dati personali da parte della PA.",
         "articoli_chiave": ["art. 13 GDPR — informativa", "art. 28 GDPR — responsabile trattamento", "art. 32 GDPR — sicurezza trattamento"],
-        "tags": ["privacy", "dati", "software", "cloud", "gdpr"],
+        "tags": ["privacy", "dati", "gdpr"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2003-06-30;196",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=codice+privacy+196+2003+GDPR",
     },
@@ -108,7 +113,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 9 aprile 2008, n. 81",
         "descrizione": "Disciplina la sicurezza nei luoghi di lavoro. Negli appalti richiede il DUVRI e la verifica dei requisiti di sicurezza del fornitore.",
         "articoli_chiave": ["art. 26 — obblighi connessi ai contratti d'appalto (DUVRI)", "art. 17 — obblighi non delegabili"],
-        "tags": ["sicurezza", "appalto", "lavori", "servizi", "contratto"],
+        "tags": ["sicurezza", "lavori", "contratto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2008-04-09;81",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+sicurezza+lavoro+81+2008",
     },
@@ -118,7 +123,7 @@ NORMATIVE_DB = [
         "estremi": "D.Lgs. 23 giugno 2011, n. 118",
         "descrizione": "Disciplina i sistemi contabili e gli schemi di bilancio di Regioni, Province e Comuni. Regolamenta la corretta imputazione delle spese e gli impegni di bilancio.",
         "articoli_chiave": ["art. 56 — principi contabili applicati", "Allegato 4/2 — principio della competenza finanziaria"],
-        "tags": ["bilancio", "fondo", "comune", "provincia", "determina", "acquisto"],
+        "tags": ["bilancio", "fondo", "comune", "provincia"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2011-06-23;118",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+118+2011+armonizzazione+contabile",
     },
@@ -128,7 +133,7 @@ NORMATIVE_DB = [
         "estremi": "Piano Nazionale di Ripresa e Resilienza, Missione 1",
         "descrizione": "Definisce gli investimenti per la transizione digitale della PA. Gli acquisti ICT finanziati dal PNRR devono rispettare le linee guida AgID e i requisiti cloud.",
         "articoli_chiave": ["Componente 1.1 — Infrastrutture digitali", "Componente 1.2 — Abilitazione migrazione al cloud"],
-        "tags": ["pnrr", "cloud", "software", "digitalizzazione", "agid", "fondo"],
+        "tags": ["pnrr", "digitalizzazione", "agid", "fondo"],
         "url_normattiva": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
     },
@@ -138,11 +143,11 @@ NORMATIVE_DB = [
         "estremi": "L. 13 agosto 2010, n. 136",
         "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti dedicati e strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG e, se finanziato con fondi pubblici, il CUP. La mancata indicazione nelle determine costituisce violazione.",
         "articoli_chiave": ["art. 3 — obblighi di tracciabilità dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilità"],
-        "tags": ["cig", "cup", "tracciabilità", "acquisto", "appalto", "fornitore", "contratto", "determina", "gara", "rup"],
+        "tags": ["cig", "cup", "tracciabilità", "rup"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
-    # ── NUOVE NORME ──────────────────────────────────────────────────────────────
+    # ── NORME AGGIUNTIVE ─────────────────────────────────────────────────────────
     {
         "id": "l_241_1990",
         "titolo": "Legge sul procedimento amministrativo",
@@ -155,7 +160,7 @@ NORMATIVE_DB = [
             "art. 21-octies — annullabilità del provvedimento",
             "art. 22 — accesso agli atti amministrativi",
         ],
-        "tags": ["determina", "delibera", "ordinanza", "procedimento", "motivazione", "accesso", "comune", "provincia", "appalto", "acquisto"],
+        "tags": ["procedimento", "motivazione", "accesso"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1990-08-07;241",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+241+1990+procedimento+amministrativo",
     },
@@ -170,7 +175,7 @@ NORMATIVE_DB = [
             "art. 95 — criteri di aggiudicazione",
             "art. 106 — modifica dei contratti in corso",
         ],
-        "tags": ["appalto", "gara", "acquisto", "affidamento", "contratto", "proroga", "servizi", "lavori", "cig"],
+        "tags": ["proroga", "affidamento"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2016-04-18;50",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+50+2016+codice+contratti+pubblici",
     },
@@ -184,7 +189,9 @@ NORMATIVE_DB = [
             "art. 1 co. 450 — obbligo MEPA per acquisti sotto soglia comunitaria",
             "art. 1 co. 452 — benchmark prezzi Consip per PA non statali",
         ],
-        "tags": ["mepa", "consip", "acquisto", "appalto", "fornitore", "determina", "cig", "affidamento", "benchmark"],
+        # convenzione_only=True: questa norma entra solo se l'utente spunta "Convenzione/MEPA"
+        "tags": ["mepa", "consip", "benchmark"],
+        "convenzione_only": True,
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2006-12-27;296",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+296+2006+finanziaria+consip+mepa+449",
     },
@@ -199,7 +206,7 @@ NORMATIVE_DB = [
             "art. 24 — reati contro la PA (corruzione, concussione, frode)",
             "art. 25 — peculato, corruzione e induzione indebita",
         ],
-        "tags": ["anticorruzione", "appalto", "fornitore", "contratto", "gara", "conflitto", "determina"],
+        "tags": ["mog", "231"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-06-08;231",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+231+2001+responsabilita+amministrativa+enti",
     },
@@ -213,78 +220,89 @@ NORMATIVE_DB = [
             "Regolamento ACN 2022 — classificazione dati e servizi cloud",
             "Circolare AgID 2/2018 — criteri qualificazione CSP e SaaS",
         ],
-        "tags": ["cloud", "software", "saas", "agid", "digitalizzazione", "pnrr", "ict", "acquisto", "mepa"],
+        "tags": ["qualificazione", "marketplace", "psn", "saas", "agid"],
         "url_normattiva": "https://www.agid.gov.it/it/infrastrutture/cloud-pa",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=AgID+qualificazione+cloud+PA+628+2021",
     },
 ]
 
-# Indice tag → norm_id
+# Indice tag → norm_id (esclude norme convenzione_only dall'indice generale)
 TAG_INDEX: dict = {}
+TAG_INDEX_CONV: dict = {}  # indice separato per norme convenzione_only
+
 for _n in NORMATIVE_DB:
+    _is_conv_only = _n.get("convenzione_only", False)
     for _t in _n["tags"]:
-        TAG_INDEX.setdefault(_t, []).append(_n["id"])
+        if _is_conv_only:
+            TAG_INDEX_CONV.setdefault(_t, []).append(_n["id"])
+        else:
+            TAG_INDEX.setdefault(_t, []).append(_n["id"])
+        # anche nell'indice generale per poterle trovare se convenzione=True
+        TAG_INDEX.setdefault(_t, [])
+        if _n["id"] not in TAG_INDEX.get(_t, []) and not _is_conv_only:
+            pass  # già aggiunto sopra
+
 NORME_BY_ID = {n["id"]: n for n in NORMATIVE_DB}
 
 TIPO_ATTO_TAGS = {
-    "determina":  ["determina", "acquisto", "cig"],
+    "determina":  ["cig"],
     "delibera":   ["delibera", "comune"],
     "ordinanza":  ["ordinanza"],
-    "decreto":    ["determina"],
-    "contratto":  ["contratto", "appalto", "cig"],
+    "decreto":    [],
+    "contratto":  ["contratto", "sicurezza"],
 }
 
 SEMANTIC_MAP = {
-    "acquisto":      ["acquisto", "appalto", "cig"],
-    "software":      ["software", "digitalizzazione", "dati", "privacy", "saas"],
-    "cloud":         ["cloud", "pnrr", "software", "saas", "agid"],
-    "hardware":      ["acquisto", "appalto"],
-    "servizi":       ["appalto", "acquisto", "sicurezza", "cig"],
+    # acquisto/appalto: match diretto, non espanso ad altri tag generici
+    "acquisto":      ["acquisto"],
+    "appalto":       ["appalto", "gara"],
+    "software":      ["software", "digitalizzazione", "saas"],
+    "cloud":         ["cloud", "pnrr", "saas", "agid", "qualificazione"],
+    "hardware":      ["acquisto"],
+    "servizi":       ["appalto", "sicurezza"],
     "manutenzione":  ["appalto", "sicurezza"],
     "consulenza":    ["consulenza", "personale"],
     "formazione":    ["formazione", "personale"],
-    "privacy":       ["privacy", "dati", "software"],
-    "dati":          ["dati", "privacy", "software"],
-    "gdpr":          ["privacy", "dati"],
+    "privacy":       ["privacy", "dati", "gdpr"],
+    "dati":          ["dati", "privacy"],
+    "gdpr":          ["privacy", "dati", "gdpr"],
     "trasparenza":   ["trasparenza", "anticorruzione"],
     "anticorruzione": ["anticorruzione", "trasparenza"],
-    "gara":          ["gara", "appalto", "acquisto", "cig"],
-    "appalto":       ["appalto", "gara", "sicurezza", "cig"],
-    "fornitore":     ["fornitore", "acquisto", "appalto"],
-    "mepa":          ["mepa", "acquisto", "cig", "consip"],
-    "consip":        ["mepa", "acquisto", "consip"],
-    "lavori":        ["lavori", "sicurezza", "appalto"],
-    "sicurezza":     ["sicurezza", "appalto"],
-    "personale":     ["personale", "consulenza"],
-    "bilancio":      ["bilancio", "comune"],
-    "pnrr":          ["pnrr", "cloud", "software", "cup"],
-    "comune":        ["comune", "determina", "bilancio"],
+    "gara":          ["gara", "appalto"],
+    "fornitore":     ["fornitore"],
+    "mepa":          ["mepa", "consip"],
+    "consip":        ["mepa", "consip"],
+    "lavori":        ["lavori", "sicurezza"],
+    "sicurezza":     ["sicurezza"],
+    "personale":     ["personale"],
+    "bilancio":      ["bilancio", "fondo"],
+    "pnrr":          ["pnrr", "cup"],
+    "comune":        ["comune"],
     "regione":       ["comune"],
     "provincia":     ["comune", "bilancio"],
-    "incarico":      ["consulenza", "personale"],
+    "incarico":      ["consulenza", "personale", "incarico"],
     "digitale":      ["software", "cloud", "pnrr", "agid"],
     "ict":           ["software", "cloud", "agid"],
     "gestionale":    ["software", "dati"],
     "licenza":       ["software"],
-    "abbonamento":   ["software", "acquisto"],
-    "saas":          ["software", "cloud", "privacy", "agid"],
-    "agid":          ["software", "cloud", "pnrr", "agid"],
-    "cig":           ["cig", "acquisto", "appalto"],
-    "cup":           ["cup", "cig", "pnrr"],
+    "abbonamento":   ["software"],
+    "saas":          ["saas", "cloud", "qualificazione"],
+    "agid":          ["agid", "digitalizzazione"],
+    "cig":           ["cig"],
+    "cup":           ["cup", "pnrr"],
     "tracciabilita": ["cig", "tracciabilità"],
-    "affidamento":   ["acquisto", "appalto", "cig", "affidamento"],
+    "affidamento":   ["affidamento"],
     "conflitto":     ["anticorruzione", "conflitto"],
-    # nuove chiavi semantiche
-    "procedimento":  ["procedimento", "motivazione", "determina"],
-    "motivazione":   ["motivazione", "procedimento", "determina"],
+    "procedimento":  ["procedimento", "motivazione"],
+    "motivazione":   ["motivazione", "procedimento"],
     "accesso":       ["accesso", "trasparenza"],
-    "proroga":       ["proroga", "contratto", "appalto"],
+    "proroga":       ["proroga"],
     "benchmark":     ["benchmark", "mepa", "consip"],
-    "mog":           ["anticorruzione", "fornitore", "appalto"],
-    "231":           ["anticorruzione", "fornitore", "appalto"],
-    "qualificazione": ["cloud", "agid", "saas"],
-    "marketplace":   ["cloud", "agid", "mepa"],
-    "psn":           ["cloud", "agid", "pnrr"],
+    "mog":           ["mog", "231"],
+    "231":           ["mog", "231"],
+    "qualificazione": ["qualificazione", "saas", "agid"],
+    "marketplace":   ["marketplace", "agid"],
+    "psn":           ["psn", "agid", "pnrr"],
 }
 
 STOP_WORDS = {
@@ -313,7 +331,7 @@ def _importo_tags(importo_str: str, convenzione: bool = False) -> list:
     if val is None:
         return []
     if convenzione:
-        return ["acquisto", "mepa", "consip", "cig"]
+        return ["mepa", "consip", "cig"]
     if val <= SEMI_THRESHOLD:
         return ["acquisto"]
     elif val <= DIRECT_THRESHOLD:
@@ -346,10 +364,22 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
 # ── Motore tag (pre-filtro) ────────────────────────────────────────────────────
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 convenzione: bool = False) -> list:
-    """Pre-filtro: restituisce norme candidate ordinate per score tag."""
+    """Pre-filtro: restituisce norme candidate ordinate per score tag.
+
+    Logica:
+    - tipo_atto aggiunge score +2 solo su tag specifici (non generici come 'acquisto')
+    - importo aggiunge score +3 sui tag soglia
+    - tokens del testo: match diretto +2, match semantico +1
+    - norme convenzione_only entrano solo se convenzione=True
+    - norme con score < MIN_SCORE_FOR_GROQ vengono scartate prima di Groq
+    """
     matched: dict = {}
 
     def _add(nid, score=1):
+        # Rispetta il flag convenzione_only
+        norma = NORME_BY_ID.get(nid)
+        if norma and norma.get("convenzione_only", False) and not convenzione:
+            return
         matched[nid] = matched.get(nid, 0) + score
 
     if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
@@ -358,6 +388,10 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 _add(nid, 2)
 
     for tag in _importo_tags(importo, convenzione):
+        # Per convenzione usa anche TAG_INDEX_CONV
+        target_index = TAG_INDEX_CONV if convenzione else TAG_INDEX
+        for nid in target_index.get(tag, []):
+            _add(nid, 3)
         for nid in TAG_INDEX.get(tag, []):
             _add(nid, 3)
 
@@ -369,9 +403,15 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
             continue
         for nid in TAG_INDEX.get(token, []):
             _add(nid, 2)
+        if convenzione:
+            for nid in TAG_INDEX_CONV.get(token, []):
+                _add(nid, 2)
         for sem_tag in SEMANTIC_MAP.get(token, []):
             for nid in TAG_INDEX.get(sem_tag, []):
                 _add(nid, 1)
+            if convenzione:
+                for nid in TAG_INDEX_CONV.get(sem_tag, []):
+                    _add(nid, 1)
 
     if convenzione:
         for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000", "l_296_2006_consip"):
@@ -381,6 +421,8 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
     sorted_ids = sorted(matched.items(), key=lambda x: x[1], reverse=True)
     results = []
     for nid, score in sorted_ids:
+        if score < MIN_SCORE_FOR_GROQ:
+            continue  # filtra norme marginali
         norma = NORME_BY_ID[nid].copy()
         norma["score"] = score
         norma["ai_motivation"] = ""
@@ -447,18 +489,20 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             f"- Descrizione esigenza: {testo}\n\n"
             "Queste sono le norme candidate trovate dal sistema:\n"
             f"{norme_list}\n\n"
-            "Restituisci un oggetto JSON con questa struttura:\n"
-            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi perché rilevante>\"}]}\n"
-            "Ordina dalla più rilevante alla meno rilevante. "
-            "Includi TUTTE le norme elencate, anche quelle meno pertinenti (motivation breve). "
-            "Non omettere nessuna norma dalla lista."
+            "Analizza attentamente il caso descritto e restituisci un oggetto JSON:\n"
+            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche sul perché è rilevante per QUESTO caso>\"}]}\n"
+            "Regole:\n"
+            "1. Includi SOLO le norme genuinamente applicabili a questo specifico caso.\n"
+            "2. ESCLUDI le norme che hanno solo una connessione generica o marginale.\n"
+            "3. Ordina dalla più rilevante alla meno rilevante.\n"
+            "4. La motivation deve essere specifica per il caso, non generica."
         )
 
         payload = json.dumps({
             "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
-            "max_tokens": 2048,
+            "max_tokens": 1024,
         }).encode()
 
         req = urllib.request.Request(
@@ -491,11 +535,15 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 norma["ai_motivation"] = ranked_map.get(nid, "")
                 reranked.append(norma)
 
+        # Fallback: aggiungi norme candidate non restituite da Groq (escluse intenzionalmente)
+        # Le mettiamo in coda senza motivazione AI, con score basso
         seen = {n["id"] for n in reranked}
         for n in groq_candidates:
             if n["id"] not in seen:
-                n["ai_motivation"] = ""
-                reranked.append(n)
+                n_copy = n.copy()
+                n_copy["ai_motivation"] = ""
+                n_copy["score"] = 1
+                reranked.append(n_copy)
 
         return reranked + remaining
 
