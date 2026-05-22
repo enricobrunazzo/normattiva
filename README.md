@@ -1,45 +1,100 @@
 # 🏗️ Normattiva Search
 
-App di ricerca normativa assistita per la Pubblica Amministrazione.
+App di ricerca normativa assistita per la Pubblica Amministrazione italiana.
 
-Inserisci un'esigenza amministrativa in linguaggio naturale (es. *"determina di acquisto software per un Comune sotto soglia"*) e l'app trova automaticamente le norme di riferimento da [Normattiva](https://www.normattiva.it), con ranking AI e motivazione per ogni risultato.
+Inserisci un'esigenza amministrativa in linguaggio naturale (es. *"devo acquistare un software gestionale per un Comune, importo 50.000 euro"*) e l'app individua automaticamente le norme di riferimento da [Normattiva](https://www.normattiva.it), con ranking AI e motivazione specifica per ogni risultato.
 
-## Stack
+🔗 **Live demo:** [normattiva.vercel.app](https://normattiva.vercel.app)
+
+---
+
+## Stack tecnico
 
 | Layer | Tecnologia |
 |---|---|
-| **Frontend** | HTML / CSS / Vanilla JS |
-| **Backend** | Python serverless (Vercel Functions) |
+| **Frontend** | HTML / CSS / Vanilla JS (zero dipendenze) |
+| **Backend** | Python serverless — `api/search.py` (Vercel Functions) |
 | **AI ranking** | [Groq](https://console.groq.com) — Llama 3.3 70B (free tier) |
-| **Fonte dati** | [Normattiva](https://www.normattiva.it) + [dati.normattiva.it](https://dati.normattiva.it) |
+| **Motore tag** | Pre-filtro semantico interno (stdlib Python, zero latenza) |
+| **Fonte normativa** | [Normattiva](https://www.normattiva.it) — link diretti agli articoli |
 | **Hosting** | [Vercel Hobby](https://vercel.com) (gratuito) |
+
+---
 
 ## Come funziona
 
-1. Il motore **tag-based** esegue un pre-filtro sulle norme candidate in base a tipo atto, importo e parole chiave semantiche
-2. Il modello **Llama 3.3 70B via Groq** riordina i candidati e aggiunge una motivazione specifica per l'atto in esame
-3. Se `GROQ_API_KEY` non è impostata, l'app continua a funzionare usando solo il motore tag (fallback silenzioso)
+### Pipeline a due stadi
 
-## Struttura
+```
+Input utente (testo, tipo atto, importo, oggetto)
+        ↓
+ [Stadio 1] Motore tag-based
+   • Analisi tipo atto  → TIPO_ATTO_TAGS
+   • Analisi importo    → soglie D.Lgs. 36/2023
+   • Analisi semantica  → SEMANTIC_MAP + TAG_INDEX
+   • Output: lista candidati ordinati per score
+        ↓
+ [Stadio 2] Groq AI ranking (Llama 3.3 70B)
+   • Riceve fino a 15 norme candidate
+   • Le riordina per rilevanza rispetto al caso specifico
+   • Aggiunge motivazione contestuale (1-2 frasi) per ciascuna
+   • Fallback silenzioso: se GROQ_API_KEY assente, usa solo lo stadio 1
+        ↓
+ Risultati con link Normattiva + etichetta importo + motivazione AI
+```
+
+### Soglie D.Lgs. 36/2023 applicate automaticamente
+
+| Importo | Procedura | Articolo |
+|---|---|---|
+| ≤ €5.000 | Affidamento diretto semplificato | art. 50 co. 1 |
+| ≤ €140.000 | Affidamento diretto | art. 50 |
+| ≤ €215.000 | Procedura negoziata | art. 72 |
+| > €215.000 | Procedura aperta | art. 71 |
+
+### Modalità Convenzione / MEPA
+
+Attivando il flag **Convenzione Consip / MEPA**, il motore modifica il ranking privilegiando le norme su tracciabilità (L. 136/2010), trasparenza (D.Lgs. 33/2013) e TUEL (D.Lgs. 267/2000) rispetto a quelle sulle procedure di gara autonome.
+
+---
+
+## Database normativo
+
+11 norme attualmente indicizzate:
+
+| ID | Norma | Tag principali |
+|---|---|---|
+| `dlgs_36_2023` | Codice dei contratti pubblici | acquisto, appalto, gara, CIG, RUP |
+| `dlgs_82_2005` | CAD — Codice Amministrazione Digitale | software, cloud, ICT, AgID |
+| `dlgs_33_2013` | Trasparenza e accesso civico | trasparenza, determina, FOIA |
+| `l_190_2012` | Legge Anticorruzione | anticorruzione, conflitto interessi |
+| `dlgs_267_2000` | TUEL | comune, delibera, determina, bilancio |
+| `dlgs_165_2001` | TUPI — Pubblico Impiego | personale, consulenza, incarico |
+| `dlgs_196_2003` | Codice Privacy + GDPR | privacy, dati, software, cloud |
+| `dlgs_81_2008` | T.U. Sicurezza sul Lavoro | sicurezza, DUVRI, appalto |
+| `dlgs_118_2011` | Armonizzazione contabile enti locali | bilancio, competenza finanziaria |
+| `pnrr_missione1` | PNRR — Missione 1 Digitalizzazione | cloud, AgID, transizione digitale |
+| `l_136_2010` | Tracciabilità flussi finanziari | CIG, CUP, tracciabilità |
+
+---
+
+## Struttura del progetto
 
 ```
 normattiva/
 ├── public/
-│   └── index.html         # Interfaccia utente
+│   └── index.html          # Interfaccia utente (SPA, zero framework)
 ├── api/
-│   ├── search.py          # Endpoint ricerca + ranking Groq
-│   └── utils/
-├── vercel.json            # Configurazione Vercel
-├── requirements.txt       # Nessuna dipendenza esterna (solo stdlib Python)
+│   └── search.py           # Serverless function: tag engine + Groq ranking
+├── vercel.json             # Routing Vercel (api/* → Python, resto → static)
+├── requirements.txt        # Vuoto: solo stdlib Python (urllib, json, os)
 └── README.md
 ```
 
-## Come si usa
+> **Nessuna dipendenza esterna.** Il backend usa esclusivamente la standard library Python.
+> Le chiamate a Groq avvengono tramite `urllib.request` nativo.
 
-1. Seleziona il tipo di atto amministrativo
-2. Descrivi l'esigenza in linguaggio naturale
-3. Inserisci eventuali dettagli (importo, ente, oggetto)
-4. Clicca **Cerca norme** → ottieni l'elenco delle norme rilevanti con link diretti a Normattiva e motivazione AI
+---
 
 ## Deploy su Vercel
 
@@ -48,47 +103,77 @@ normattiva/
 git clone https://github.com/enricobrunazzo/normattiva.git
 cd normattiva
 
-# 2. Installa Vercel CLI
+# 2. Installa Vercel CLI (se non presente)
 npm i -g vercel
 
 # 3. Deploy
-vercel
+vercel --prod
 ```
 
-Dopo il deploy, imposta la variabile d'ambiente nel pannello Vercel:
+### Variabile d'ambiente obbligatoria
+
+Nel pannello Vercel → **Settings → Environment Variables**:
 
 ```
-GROQ_API_KEY=<la tua chiave da console.groq.com>
+GROQ_API_KEY=gsk_...
 ```
 
-> **Groq free tier**: 14.400 richieste/giorno, nessuna carta di credito richiesta.
-> Registrati su [console.groq.com](https://console.groq.com) e genera una API key gratuita.
+> ⚠️ **Importante:** dopo aver aggiunto o modificato la variabile, effettua sempre
+> un nuovo deploy con `vercel --prod` (o un Redeploy dalla dashboard **senza**
+> spuntare “Use existing Build Cache”). Il semplice Redeploy da cache non aggiorna
+> le variabili d'ambiente nelle serverless functions.
+
+**Groq free tier:** 14.400 token/minuto, nessuna carta di credito richiesta.
+Registrati su [console.groq.com](https://console.groq.com) e genera una API key gratuita.
+
+---
 
 ## Sviluppo locale
 
 ```bash
-# Nessuna dipendenza Python da installare (requirements.txt vuoto)
+# Nessuna installazione Python necessaria
 
-# Imposta la variabile locale
-export GROQ_API_KEY=<la tua chiave>
+# Imposta la chiave Groq
+export GROQ_API_KEY=gsk_...
 
-# Avvia Vercel in locale
+# Avvia Vercel dev server (emula le serverless functions in locale)
 vercel dev
 ```
+
+L'app sarà disponibile su `http://localhost:3000`.
+
+---
+
+## Architettura variabili d'ambiente su Vercel
+
+Le env vars nelle **serverless functions Python** di Vercel sono disponibili a runtime (non solo a build time). Tuttavia:
+
+- Un **Redeploy da cache** (`vercel redeploy --reuse-build`) riusa il bundle già compilato e **non aggiorna** le variabili nel contesto di esecuzione
+- Un **nuovo build** (`vercel --prod` da CLI o push su branch) preleva sempre le variabili aggiornate
+- Il log `[INIT] GROQ_API_KEY present: True` nei Runtime Logs di Vercel conferma il corretto caricamento
+
+---
 
 ## Roadmap
 
 - [x] Struttura base progetto
-- [x] Frontend form input esigenza
-- [x] Motore tag-based con mappa semantica
-- [x] Ranking AI con Groq / Llama 3.3 70B (free tier)
-- [x] Motivazione AI per ogni norma suggerita
-- [x] Soglie D.Lgs. 36/2023 (affidamento diretto / negoziata / aperta)
-- [ ] Scheda dettaglio norma con testo degli articoli
+- [x] Frontend SPA — form input esigenza
+- [x] Motore tag-based con mappa semantica (SEMANTIC_MAP + TAG_INDEX)
+- [x] Ranking AI con Groq / Llama 3.3 70B
+- [x] Motivazione AI contestuale per ogni norma
+- [x] Soglie automatiche D.Lgs. 36/2023
+- [x] Modalità Convenzione Consip / MEPA con boost norme dedicate
+- [x] Log diagnostici runtime (`[INIT]`, `[GROQ]`, `[REQUEST]`)
+- [x] Copertura AI su tutte le norme del DB (GROQ_MAX_CANDIDATES = 15)
+- [ ] Scheda dettaglio norma con testo degli articoli chiave
 - [ ] Integrazione dati.normattiva.it open data API
-- [ ] Storico ricerche
+- [ ] Storico ricerche (localStorage)
 - [ ] Export PDF/Word delle norme trovate
+- [ ] Espansione database normativo (D.Lgs. 50/2016 pre-vigente, L. 241/1990, ecc.)
+
+---
 
 ## Licenza
 
-I dati normativi provengono da Normattiva — disponibili con licenza [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) dal 1° gennaio 2026.
+I dati normativi sono tratti da [Normattiva](https://www.normattiva.it), disponibili con licenza [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) dal 1° gennaio 2026.
+Il codice sorgente del progetto è rilasciato sotto licenza MIT.
