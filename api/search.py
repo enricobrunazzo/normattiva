@@ -3,9 +3,24 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+# ── Defensive startup log (eseguito al cold start, visibile nei Runtime Logs) ──
+_GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
+print(
+    f"[INIT] GROQ_API_KEY present: {_GROQ_API_KEY_PRESENT} "
+    f"| len={len(os.environ.get('GROQ_API_KEY', ''))}",
+    flush=True,
+)
+if not _GROQ_API_KEY_PRESENT:
+    print(
+        "[INIT] WARNING: GROQ_API_KEY non trovata nell'ambiente. "
+        "Verifica Settings → Environment Variables su Vercel e fai un nuovo deploy (non redeploy da cache).",
+        flush=True,
+    )
 
 # ── Soglie D.Lgs. 36/2023 ─────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
@@ -291,10 +306,12 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list) -> list:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
-        print("[GROQ] No API key found in environment")
+        print("[GROQ] SKIP — GROQ_API_KEY assente a runtime", flush=True)
         return candidates
 
-    print(f"[GROQ] Using key: {api_key[:8]}...{api_key[-4:]}")
+    key_preview = f"{api_key[:8]}...{api_key[-4:]}"
+    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(candidates)}", flush=True)
+    t0 = time.time()
 
     try:
         norme_list = "\n".join(
@@ -335,8 +352,11 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
         )
         resp = urllib.request.urlopen(req, timeout=8)
         data = json.loads(resp.read().decode("utf-8"))
+        elapsed = time.time() - t0
+        print(f"[GROQ] OK — {elapsed*1000:.0f}ms", flush=True)
+
         raw = data["choices"][0]["message"]["content"].strip()
-        print(f"[GROQ RAW] {raw[:500]!r}")
+        print(f"[GROQ RAW] {raw[:500]!r}", flush=True)
 
         ranked_data = _extract_json(raw)
 
@@ -360,15 +380,18 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")[:500]
-        print(f"[GROQ ERROR] HTTPError {e.code} {e.reason}: {body}")
+        elapsed = time.time() - t0
+        print(f"[GROQ ERROR] HTTPError {e.code} {e.reason} ({elapsed*1000:.0f}ms): {body}", flush=True)
         return candidates
     except urllib.error.URLError as e:
-        print(f"[GROQ ERROR] URLError: {e.reason}")
+        elapsed = time.time() - t0
+        print(f"[GROQ ERROR] URLError ({elapsed*1000:.0f}ms): {e.reason}", flush=True)
         return candidates
     except Exception as e:
         import traceback
-        print(f"[GROQ ERROR] {type(e).__name__}: {e}")
-        print(traceback.format_exc())
+        elapsed = time.time() - t0
+        print(f"[GROQ ERROR] {type(e).__name__} ({elapsed*1000:.0f}ms): {e}", flush=True)
+        print(traceback.format_exc(), flush=True)
         return candidates
 
 
@@ -402,6 +425,7 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        t_start = time.time()
         try:
             parsed = urllib.parse.urlparse(self.path)
             params = urllib.parse.parse_qs(parsed.query)
@@ -409,12 +433,24 @@ class handler(BaseHTTPRequestHandler):
             tipo_atto = params.get("tipo_atto", [""])[0].strip()
             oggetto   = params.get("oggetto",   [""])[0].strip()
             importo   = params.get("importo",   [""])[0].strip()
+
+            print(
+                f"[REQUEST] testo={testo[:40]!r} tipo_atto={tipo_atto!r} "
+                f"oggetto={oggetto[:40]!r} importo={importo!r} "
+                f"groq_key_present={bool(os.environ.get('GROQ_API_KEY', ''))}",
+                flush=True,
+            )
+
             if not testo and not oggetto:
                 self._send_json({"error": "Inserisci almeno una descrizione o un oggetto"}, 400)
                 return
             data = find_norme(testo, tipo_atto, oggetto, importo)
+            elapsed_ms = int((time.time() - t_start) * 1000)
+            print(f"[REQUEST] completed in {elapsed_ms}ms | ai_active={data['ai_active']}", flush=True)
             self._send_json(data)
         except Exception as e:
+            elapsed_ms = int((time.time() - t_start) * 1000)
+            print(f"[REQUEST ERROR] {elapsed_ms}ms — {e}", flush=True)
             self._send_json({"error": str(e)}, 500)
 
     def do_OPTIONS(self):
