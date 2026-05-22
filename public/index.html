@@ -160,7 +160,7 @@
     <div class="header-right">
       <div class="ai-badge" id="aiBadge" aria-label="Ranking AI attivo">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        Gemini AI attivo
+        Groq AI attivo
       </div>
       <button class="theme-btn" data-theme-toggle aria-label="Attiva modalità scura">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -321,7 +321,6 @@
 
   function renderResults(data){
     skeleton.style.display='none';
-    // Mostra/nasconde badge AI nell'header
     if(data.ai_active){aiBadge.classList.add('active');}else{aiBadge.classList.remove('active');}
     const{results=[]}=data;
     if(results.length===0){emptyState.style.display='block';return;}
