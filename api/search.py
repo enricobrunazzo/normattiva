@@ -348,6 +348,8 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "application/json",
             },
         )
         resp = urllib.request.urlopen(req, timeout=8)
