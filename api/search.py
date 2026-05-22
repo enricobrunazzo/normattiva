@@ -1,50 +1,170 @@
-"""Endpoint /api/search — ricerca normativa su Normattiva."""
+"""Endpoint /api/search — ricerca normativa PA."""
 from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
 
-import httpx
-from bs4 import BeautifulSoup
-
-# ── Costanti soglie (D.Lgs. 36/2023) ──────────────────────────────────────────
+# ── Soglie D.Lgs. 36/2023 ──────────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
-TIPO_ATTO_KEYWORDS = {
-    "determina": ["determinazione dirigenziale", "determina a contrarre", "D.Lgs. 36/2023"],
-    "delibera":  ["deliberazione", "delibera giunta", "delibera consiglio"],
-    "ordinanza": ["ordinanza sindacale", "ordinanza dirigenziale"],
-    "decreto":   ["decreto", "atto di indirizzo"],
-    "contratto": ["contratto pubblico", "accordo", "convenzione"],
+# ── Database normativo locale ─────────────────────────────────────────────────────────
+# Ogni norma ha: id, titolo, estremi, descrizione, tags, url_normattiva, url_ricerca
+NORMATIVE_DB = [
+    {
+        "id": "dlgs_36_2023",
+        "titolo": "Codice dei contratti pubblici",
+        "estremi": "D.Lgs. 31 marzo 2023, n. 36",
+        "descrizione": "Disciplina l'affidamento e l'esecuzione di appalti pubblici e concessioni. Regolamenta le soglie per affidamento diretto (art. 50), procedura negoziata (art. 72) e procedura aperta (art. 71). Obbliga alla nomina del RUP e all'acquisizione del CIG.",
+        "articoli_chiave": ["art. 50 — affidamento diretto", "art. 51 — procedura negoziata semplificata", "art. 71 — procedura aperta", "art. 72 — procedura negoziata", "art. 15 — RUP"],
+        "tags": ["acquisto", "appalto", "gara", "fornitore", "mepa", "consip", "lavori", "servizi", "manutenzione", "hardware", "software", "cloud", "determina"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2023-03-31;36",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+36+2023+codice+contratti+pubblici",
+    },
+    {
+        "id": "dlgs_82_2005",
+        "titolo": "Codice dell'Amministrazione Digitale (CAD)",
+        "estremi": "D.Lgs. 7 marzo 2005, n. 82",
+        "descrizione": "Regola la digitalizzazione della PA, l'uso di software, cloud computing e servizi ICT. Stabilisce l'obbligo di preferenza per soluzioni open source (art. 68) e il riuso del software (art. 69). Base normativa per acquisti ICT e cloud da parte di enti pubblici.",
+        "articoli_chiave": ["art. 68 — analisi comparativa soluzioni", "art. 69 — riuso del software", "art. 50 — disponibilità dei dati"],
+        "tags": ["software", "cloud", "digitalizzazione", "ict", "dati", "agid"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2005-03-07;82",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=codice+amministrazione+digitale+CAD+82+2005",
+    },
+    {
+        "id": "dlgs_33_2013",
+        "titolo": "Trasparenza e accesso civico",
+        "estremi": "D.Lgs. 14 marzo 2013, n. 33",
+        "descrizione": "Obbliga le PA alla pubblicazione su \"Amministrazione Trasparente\" di dati su contratti, affidamenti, appalti e spese. Ogni determina di acquisto rilevante deve essere pubblicata. Disciplina anche il FOIA (accesso civico generalizzato, art. 5).",
+        "articoli_chiave": ["art. 23 — obblighi pubblicazione provvedimenti", "art. 37 — pubblicazione contratti e appalti", "art. 5 — accesso civico"],
+        "tags": ["trasparenza", "acquisto", "appalto", "determina", "delibera", "anticorruzione"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2013-03-14;33",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+33+2013+trasparenza+amministrativa",
+    },
+    {
+        "id": "l_190_2012",
+        "titolo": "Legge Anticorruzione",
+        "estremi": "L. 6 novembre 2012, n. 190",
+        "descrizione": "Introduce misure per la prevenzione e la repressione della corruzione nella PA. Obbliga gli enti a dotarsi di Piano Triennale di Prevenzione della Corruzione (PTPCT). Impone obblighi di rotazione del personale e limitazioni agli affidamenti diretti reiterati.",
+        "articoli_chiave": ["art. 1 — PTPCT", "art. 1 co. 9 — misure obbligatorie"],
+        "tags": ["anticorruzione", "trasparenza", "acquisto", "appalto", "determina"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2012-11-06;190",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+190+2012+anticorruzione",
+    },
+    {
+        "id": "dlgs_267_2000",
+        "titolo": "Testo Unico Enti Locali (TUEL)",
+        "estremi": "D.Lgs. 18 agosto 2000, n. 267",
+        "descrizione": "Disciplina l'organizzazione e il funzionamento di Comuni e Province. Regolamenta le competenze degli organi (Consiglio, Giunta, Dirigenti), la forma degli atti (delibere, determine) e la gestione finanziaria. Riferimento primario per ogni atto amministrativo di ente locale.",
+        "articoli_chiave": ["art. 107 — competenze dirigenziali", "art. 192 — determinazione a contrarre", "art. 183 — assunzione impegno di spesa"],
+        "tags": ["comune", "provincia", "determina", "delibera", "ordinanza", "acquisto", "appalto", "bilancio"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2000-08-18;267",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+enti+locali+TUEL+267+2000",
+    },
+    {
+        "id": "dlgs_165_2001",
+        "titolo": "Testo Unico Pubblico Impiego (TUPI)",
+        "estremi": "D.Lgs. 30 marzo 2001, n. 165",
+        "descrizione": "Disciplina il rapporto di lavoro dei dipendenti delle pubbliche amministrazioni. Regola incarichi, consulenze esterne (art. 7), formazione e organizzazione degli uffici. Rilevante per determine relative a personale, incarichi professionali e formazione.",
+        "articoli_chiave": ["art. 7 — gestione risorse e incarichi", "art. 19 — incarichi dirigenziali", "art. 36 — utilizzo flessibile"],
+        "tags": ["personale", "consulenza", "formazione", "determina", "incarico"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-03-30;165",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+pubblico+impiego+165+2001",
+    },
+    {
+        "id": "dlgs_196_2003",
+        "titolo": "Codice Privacy + GDPR",
+        "estremi": "D.Lgs. 30 giugno 2003, n. 196 (mod. dal Reg. UE 2016/679)",
+        "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR (Regolamento UE 2016/679) è direttamente applicabile. Rilevante per acquisti di software, sistemi gestionali, cloud e qualsiasi trattamento dati personali da parte della PA.",
+        "articoli_chiave": ["art. 13 GDPR — informativa", "art. 28 GDPR — responsabile trattamento", "art. 32 GDPR — sicurezza trattamento"],
+        "tags": ["privacy", "dati", "software", "cloud", "gdpr"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2003-06-30;196",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=codice+privacy+196+2003+GDPR",
+    },
+    {
+        "id": "dlgs_81_2008",
+        "titolo": "Testo Unico Sicurezza sul Lavoro",
+        "estremi": "D.Lgs. 9 aprile 2008, n. 81",
+        "descrizione": "Disciplina la sicurezza e la salute nei luoghi di lavoro. Negli appalti e contratti pubblici richiede la predisposizione del DUVRI (Documento Unico Valutazione Rischi da Interferenze) e la verifica dei requisiti di sicurezza del fornitore.",
+        "articoli_chiave": ["art. 26 — obblighi connessi ai contratti d'appalto (DUVRI)", "art. 17 — obblighi non delegabili del datore di lavoro"],
+        "tags": ["sicurezza", "appalto", "lavori", "servizi", "contratto"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2008-04-09;81",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=testo+unico+sicurezza+lavoro+81+2008",
+    },
+    {
+        "id": "dlgs_118_2011",
+        "titolo": "Armonizzazione contabile enti locali",
+        "estremi": "D.Lgs. 23 giugno 2011, n. 118",
+        "descrizione": "Disciplina i sistemi contabili e gli schemi di bilancio di Regioni, Province e Comuni. Regolamenta la corretta imputazione delle spese, gli impegni di bilancio e la copertura finanziaria degli atti di spesa della PA.",
+        "articoli_chiave": ["art. 56 — principi contabili applicati", "Allegato 4/2 — principio della competenza finanziaria"],
+        "tags": ["bilancio", "fondo", "comune", "provincia", "determina", "acquisto"],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2011-06-23;118",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+118+2011+armonizzazione+contabile",
+    },
+    {
+        "id": "pnrr_missione1",
+        "titolo": "PNRR — Missione 1: Digitalizzazione PA",
+        "estremi": "Piano Nazionale di Ripresa e Resilienza, Missione 1",
+        "descrizione": "Definisce gli investimenti per la transizione digitale della PA. Gli acquisti ICT finanziati dal PNRR devono rispettare le linee guida AgID, i requisiti cloud e le condizioni di interoperabilità. Rilevante per determine su acquisti software, cloud e infrastrutture IT.",
+        "articoli_chiave": ["Componente 1.1 — Infrastrutture digitali", "Componente 1.2 — Abilitazione e facilitazione migrazione al cloud"],
+        "tags": ["pnrr", "cloud", "software", "digitalizzazione", "agid", "fondo"],
+        "url_normattiva": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=PNRR+piano+nazionale+ripresa+resilienza+digitalizzazione",
+    },
+]
+
+# Mappa tag → norma, costruita dal DB
+TAG_INDEX: dict = {}
+for _n in NORMATIVE_DB:
+    for _t in _n["tags"]:
+        TAG_INDEX.setdefault(_t, []).append(_n["id"])
+
+NORME_BY_ID = {n["id"]: n for n in NORMATIVE_DB}
+
+# ── Costanti tipo atto ────────────────────────────────────────────────────────────
+TIPO_ATTO_TAGS = {
+    "determina":  ["determina", "acquisto"],
+    "delibera":   ["delibera", "comune"],
+    "ordinanza":  ["ordinanza"],
+    "decreto":    ["determina"],
+    "contratto":  ["contratto", "appalto"],
 }
 
 SEMANTIC_MAP = {
-    "acquisto":    ["codice contratti pubblici", "D.Lgs. 36/2023"],
-    "software":    ["digitalizzazione", "CAD", "D.Lgs. 82/2005", "AgID"],
-    "cloud":       ["cloud computing PA", "AgID", "PNRR digitalizzazione"],
-    "hardware":    ["codice contratti pubblici", "D.Lgs. 36/2023"],
-    "servizi":     ["affidamento servizi", "D.Lgs. 36/2023"],
-    "manutenzione":["contratto manutenzione", "D.Lgs. 36/2023"],
-    "consulenza":  ["incarico professionale", "D.Lgs. 165/2001", "articolo 7 TUPI"],
-    "formazione":  ["formazione dipendenti PA", "D.Lgs. 165/2001"],
-    "privacy":     ["GDPR", "D.Lgs. 196/2003", "Regolamento UE 2016/679"],
-    "dati":        ["protezione dati", "GDPR", "D.Lgs. 196/2003"],
-    "trasparenza": ["D.Lgs. 33/2013", "amministrazione trasparente", "FOIA"],
-    "anticorruzione":["L. 190/2012", "ANAC", "piano anticorruzione"],
-    "gara":        ["D.Lgs. 36/2023", "bando di gara", "CIG"],
-    "appalto":     ["D.Lgs. 36/2023", "appalto pubblico", "CIG", "RUP"],
-    "fornitore":   ["albo fornitori", "MEPA", "Consip"],
-    "mepa":        ["MEPA", "mercato elettronico PA", "Consip"],
-    "consip":      ["Consip", "convenzioni Consip", "acquisti centralizzati"],
-    "lavori":      ["lavori pubblici", "D.Lgs. 36/2023", "progettazione"],
-    "sicurezza":   ["D.Lgs. 81/2008", "sicurezza lavoro", "DUVRI"],
-    "personale":   ["D.Lgs. 165/2001", "TUPI", "personale PA"],
-    "bilancio":    ["D.Lgs. 118/2011", "armonizzazione contabile"],
-    "pnrr":        ["PNRR", "Piano Nazionale Ripresa Resilienza"],
-    "comune":      ["TUEL", "D.Lgs. 267/2000", "enti locali"],
-    "regione":     ["legge regionale", "autonomia regionale"],
-    "fondo":       ["fondi strutturali", "PNRR"],
+    "acquisto":     ["acquisto", "appalto"],
+    "software":     ["software", "digitalizzazione", "dati", "privacy"],
+    "cloud":        ["cloud", "pnrr", "software"],
+    "hardware":     ["acquisto", "appalto"],
+    "servizi":      ["appalto", "acquisto", "sicurezza"],
+    "manutenzione": ["appalto", "sicurezza"],
+    "consulenza":   ["consulenza", "personale"],
+    "formazione":   ["formazione", "personale"],
+    "privacy":      ["privacy", "dati", "software"],
+    "dati":         ["dati", "privacy", "software"],
+    "gdpr":         ["privacy", "dati"],
+    "trasparenza":  ["trasparenza", "anticorruzione"],
+    "anticorruzione":["anticorruzione", "trasparenza"],
+    "gara":         ["gara", "appalto", "acquisto"],
+    "appalto":      ["appalto", "gara", "sicurezza"],
+    "fornitore":    ["fornitore", "acquisto", "appalto"],
+    "mepa":         ["mepa", "acquisto"],
+    "consip":       ["mepa", "acquisto"],
+    "lavori":       ["lavori", "sicurezza", "appalto"],
+    "sicurezza":    ["sicurezza", "appalto"],
+    "personale":    ["personale", "consulenza"],
+    "bilancio":     ["bilancio", "comune"],
+    "pnrr":         ["pnrr", "cloud", "software"],
+    "comune":       ["comune", "determina", "bilancio"],
+    "regione":      ["comune"],
+    "provincia":    ["comune", "bilancio"],
+    "incarico":     ["consulenza", "personale"],
+    "digitale":     ["software", "cloud", "pnrr"],
+    "ict":          ["software", "cloud"],
+    "gestionale":   ["software", "dati"],
+    "licenza":      ["software"],
+    "abbonamento":  ["software", "acquisto"],
+    "saas":         ["software", "cloud", "privacy"],
+    "agid":         ["software", "cloud", "pnrr"],
 }
 
 STOP_WORDS = {
@@ -56,132 +176,99 @@ STOP_WORDS = {
     "con","su","per","tra","fra","che","chi","cui",
     "non","ma","se","ho","ha","hanno","devo","deve",
     "voglio","fare","sono","e","o","come","quando","dove",
-}
-
-BASE_URL   = "https://www.normattiva.it"
-SEARCH_URL = f"{BASE_URL}/ricerca/semplice"
-HEADERS = {
-    "User-Agent": "NormativaSearchBot/1.0 (+https://github.com/enricobrunazzo/normattiva)",
-    "Accept": "text/html,application/xhtml+xml",
-    "Accept-Language": "it-IT,it;q=0.9",
+    "questo","questa","questi","queste","also","such",
 }
 
 
-# ── Keyword extraction ─────────────────────────────────────────────────────────
-def _importo_keywords(importo_str: str) -> list:
+# ── Logica di ricerca ───────────────────────────────────────────────────────────
+def _importo_tags(importo_str: str) -> list:
     try:
         val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
     except (ValueError, AttributeError):
         return []
     if val <= SEMI_THRESHOLD:
-        return ["affidamento diretto", "microprocurement", "articolo 50 codice contratti"]
+        return ["acquisto"]
     elif val <= DIRECT_THRESHOLD:
-        return ["affidamento diretto", "articolo 50 codice contratti", "determina a contrarre"]
+        return ["acquisto", "appalto"]
     elif val <= NEGO_THRESHOLD:
-        return ["procedura negoziata", "articolo 72 codice contratti", "CIG", "RUP"]
+        return ["appalto", "gara"]
     else:
-        return ["procedura aperta", "bando di gara", "articolo 71 codice contratti", "RUP", "CIG"]
+        return ["appalto", "gara", "lavori"]
 
 
-def extract_keywords(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> list:
-    keywords = []
-    if tipo_atto and tipo_atto.lower() in TIPO_ATTO_KEYWORDS:
-        keywords.extend(TIPO_ATTO_KEYWORDS[tipo_atto.lower()])
-    if importo:
-        keywords.extend(_importo_keywords(importo))
+def _importo_label(importo_str: str) -> str:
+    try:
+        val = float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
+    except (ValueError, AttributeError):
+        return ""
+    if val <= SEMI_THRESHOLD:
+        return f"€{val:,.0f} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
+    elif val <= DIRECT_THRESHOLD:
+        return f"€{val:,.0f} — Affidamento diretto (art. 50, D.Lgs. 36/2023)"
+    elif val <= NEGO_THRESHOLD:
+        return f"€{val:,.0f} — Procedura negoziata (art. 72, D.Lgs. 36/2023)"
+    else:
+        return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
+
+
+def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str = "") -> dict:
+    matched_ids: dict = {}  # id -> score
+
+    def _add(norm_id: str, score: int = 1):
+        matched_ids[norm_id] = matched_ids.get(norm_id, 0) + score
+
+    # 1. Tipo atto
+    if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
+        for tag in TIPO_ATTO_TAGS[tipo_atto.lower()]:
+            for nid in TAG_INDEX.get(tag, []):
+                _add(nid, 2)
+
+    # 2. Importo
+    for tag in _importo_tags(importo):
+        for nid in TAG_INDEX.get(tag, []):
+            _add(nid, 3)  # importo molto rilevante
+
+    # 3. Analisi semantica testo + oggetto
     full_text = f"{testo} {oggetto}".lower()
-    tokens = full_text.replace(",", " ").replace(".", " ").split()
+    tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
     for token in tokens:
         token = token.strip("'\"()[]")
         if token in STOP_WORDS or len(token) < 4:
             continue
-        if token in SEMANTIC_MAP:
-            keywords.extend(SEMANTIC_MAP[token])
-    seen = set()
-    result = []
-    for k in keywords:
-        if k not in seen:
-            seen.add(k)
-            result.append(k)
-    if not result:
-        significant = [t for t in tokens if t not in STOP_WORDS and len(t) >= 4]
-        result = list(dict.fromkeys(significant[:8]))
-    return result[:12]
+        # Match diretto nei tag
+        for nid in TAG_INDEX.get(token, []):
+            _add(nid, 2)
+        # Match da mappa semantica
+        for sem_tag in SEMANTIC_MAP.get(token, []):
+            for nid in TAG_INDEX.get(sem_tag, []):
+                _add(nid, 1)
 
-
-# ── Normattiva client ──────────────────────────────────────────────────────────
-def _parse_result(el):
-    try:
-        title_el = el.select_one(".titolo, h3, h4, .titolo-atto")
-        title = title_el.get_text(strip=True) if title_el else ""
-        link_el = el.select_one("a[href]")
-        href = link_el["href"] if link_el else ""
-        url = href if href.startswith("http") else f"{BASE_URL}{href}"
-        estremi_el = el.select_one(".estremi, .data-atto, .numero-atto")
-        estremi = estremi_el.get_text(strip=True) if estremi_el else ""
-        snippet_el = el.select_one(".sommario, .abstract, .descrizione, p")
-        snippet = snippet_el.get_text(strip=True)[:300] if snippet_el else ""
-        urn = href.split("/atto/")[-1].split("?")[0] if "/atto/" in href else ""
-        if not title and not href:
-            return None
-        return {"title": title, "estremi": estremi, "snippet": snippet, "url": url, "urn": urn}
-    except Exception:
-        return None
-
-
-def _parse_fallback(soup, keyword: str) -> list:
-    items = []
-    for a in soup.select("a[href*='/atto/']")[:5]:
-        href = a["href"]
-        url = href if href.startswith("http") else f"{BASE_URL}{href}"
-        title = a.get_text(strip=True)
-        if title and len(title) > 5:
-            items.append({
-                "title": title, "estremi": "",
-                "snippet": f"Risultato per: {keyword}",
-                "url": url,
-                "urn": href.split("/atto/")[-1].split("?")[0],
-            })
-    return items
-
-
-def _query(keyword: str, max_results: int = 5) -> list:
-    params = {"query": keyword, "tipologiaDoc": "", "tipoVigenza": "VIGENTE"}
-    with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-        resp = client.get(SEARCH_URL, params=params, headers=HEADERS)
-        resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "lxml")
-    items = []
-    result_list = soup.select("#risultatiRicerca .risultato-ricerca, .risultato, li.atto")
-    for el in result_list[:max_results]:
-        item = _parse_result(el)
-        if item:
-            items.append(item)
-    if not items:
-        items = _parse_fallback(soup, keyword)
-    return items
-
-
-def search_normattiva(keywords: list, max_results: int = 10) -> list:
+    # Ordina per score decrescente
+    sorted_ids = sorted(matched_ids.items(), key=lambda x: x[1], reverse=True)
     results = []
-    seen_urns = set()
-    for keyword in keywords[:5]:
-        try:
-            batch = _query(keyword, max_results=5)
-            for item in batch:
-                urn = item.get("urn", "")
-                if urn and urn not in seen_urns:
-                    seen_urns.add(urn)
-                    item["source_keyword"] = keyword
-                    results.append(item)
-                elif not urn:
-                    item["source_keyword"] = keyword
-                    results.append(item)
-        except Exception:
-            continue
-        if len(results) >= max_results:
-            break
-    return results[:max_results]
+    for nid, score in sorted_ids:
+        norma = NORME_BY_ID[nid].copy()
+        norma["score"] = score
+        results.append(norma)
+
+    # Keywords estratte per il frontend
+    kw_set = set()
+    for token in tokens:
+        token = token.strip("'\"()[]")
+        if token not in STOP_WORDS and len(token) >= 4 and (
+            token in TAG_INDEX or token in SEMANTIC_MAP
+        ):
+            kw_set.add(token)
+    keywords = list(kw_set)[:10]
+
+    importo_label = _importo_label(importo) if importo else ""
+
+    return {
+        "keywords": keywords,
+        "importo_label": importo_label,
+        "results": results,
+        "total": len(results),
+    }
 
 
 # ── Handler Vercel ─────────────────────────────────────────────────────────────
@@ -196,11 +283,10 @@ class handler(BaseHTTPRequestHandler):
             oggetto   = params.get("oggetto",   [""])[0].strip()
             importo   = params.get("importo",   [""])[0].strip()
             if not testo and not oggetto:
-                self._send_json({"error": "Parametro 'testo' obbligatorio"}, 400)
+                self._send_json({"error": "Inserisci almeno una descrizione o un oggetto"}, 400)
                 return
-            keywords = extract_keywords(testo, tipo_atto, oggetto, importo)
-            results  = search_normattiva(keywords)
-            self._send_json({"keywords": keywords, "results": results, "total": len(results)})
+            data = find_norme(testo, tipo_atto, oggetto, importo)
+            self._send_json(data)
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
 
