@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 
@@ -263,6 +264,30 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str) -> list:
     return results
 
 
+def _extract_json(raw: str) -> dict:
+    """Estrae il primo oggetto JSON valido da una stringa, anche con testo attorno."""
+    # 1. tenta parse diretto
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    # 2. estrae blocco ```json ... ``` o ``` ... ```
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    # 3. cerca il primo { ... } di livello radice
+    m = re.search(r"(\{[\s\S]*\})", raw)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
+
+
 # ── Groq ranking (Llama 3.3 70B — free tier) ──────────────────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list) -> list:
@@ -291,14 +316,9 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             f"- Descrizione esigenza: {testo}\n\n"
             "Queste sono le norme candidate trovate dal sistema:\n"
             f"{norme_list}\n\n"
-            "Restituisci SOLO un oggetto JSON valido (nessun testo prima o dopo) con questa struttura:\n"
-            "{\n"
-            '  "ranked": [\n'
-            '    {"id": "<id_norma>", "motivation": "<1-2 frasi in italiano: perché questa norma è rilevante per questo specifico atto>"},\n'
-            "    ...\n"
-            "  ]\n"
-            "}\n"
-            "Ordina dalla più rilevante alla meno rilevante. "
+            "Restituisci un oggetto JSON con questa struttura:\n"
+            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi perch\u00e8 rilevante>\"}]}\n"
+            "Ordina dalla pi\u00f9 rilevante alla meno rilevante. "
             "Includi solo le norme effettivamente applicabili. Ometti quelle non pertinenti."
         )
 
@@ -307,6 +327,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
             "max_tokens": 1024,
+            "response_format": {"type": "json_object"},
         }).encode("utf-8")
 
         req = urllib.request.Request(
@@ -320,26 +341,21 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
         resp = urllib.request.urlopen(req, timeout=8)
         data = json.loads(resp.read().decode("utf-8"))
         raw = data["choices"][0]["message"]["content"].strip()
+        print(f"[GROQ RAW] {raw[:500]!r}")
 
-        # Estrai JSON anche se il modello aggiunge backtick
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        ranked_data = json.loads(raw)
+        ranked_data = _extract_json(raw)
 
         by_id = {n["id"]: n for n in candidates}
         result = []
         ranked_ids = set()
         for item in ranked_data.get("ranked", []):
-            nid = item["id"]
+            nid = item.get("id", "")
             if nid in by_id:
                 norma = by_id[nid].copy()
                 norma["ai_motivation"] = item.get("motivation", "")
                 result.append(norma)
                 ranked_ids.add(nid)
 
-        # Aggiunge eventuali norme non restituite dal modello in fondo
         for n in candidates:
             if n["id"] not in ranked_ids:
                 n["ai_motivation"] = ""
@@ -357,7 +373,6 @@ def find_norme(testo: str, tipo_atto: str = "", oggetto: str = "", importo: str 
     candidates = _tag_search(testo, tipo_atto, oggetto, importo)
     results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates)
 
-    # Keywords per frontend
     full_text = f"{testo} {oggetto}".lower()
     tokens = full_text.replace(",", " ").replace(".", " ").replace("/", " ").split()
     kw_set = set()
