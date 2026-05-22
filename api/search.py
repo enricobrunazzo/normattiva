@@ -27,6 +27,10 @@ SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
+# ── Numero massimo di candidati passati a Groq ────────────────────────────────
+# Limita il payload e garantisce che max_tokens sia sufficiente per tutte le motivazioni
+GROQ_MAX_CANDIDATES = 8
+
 # ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
@@ -309,14 +313,18 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
         print("[GROQ] SKIP — GROQ_API_KEY assente a runtime", flush=True)
         return candidates
 
+    # Limita i candidati passati a Groq per garantire motivazioni complete
+    groq_candidates = candidates[:GROQ_MAX_CANDIDATES]
+    remaining = candidates[GROQ_MAX_CANDIDATES:]
+
     key_preview = f"{api_key[:8]}...{api_key[-4:]}"
-    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(candidates)}", flush=True)
+    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)})", flush=True)
     t0 = time.time()
 
     try:
         norme_list = "\n".join(
             f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
-            for n in candidates
+            for n in groq_candidates
         )
         importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
         prompt = (
@@ -331,14 +339,15 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             "Restituisci un oggetto JSON con questa struttura:\n"
             "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi perch\u00e8 rilevante>\"}]}\n"
             "Ordina dalla pi\u00f9 rilevante alla meno rilevante. "
-            "Includi solo le norme effettivamente applicabili. Ometti quelle non pertinenti."
+            "Includi TUTTE le norme elencate, anche quelle meno pertinenti (motivation breve). "
+            "Non omettere nessuna norma dalla lista."
         )
 
         payload = json.dumps({
             "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "response_format": {"type": "json_object"},
         }).encode("utf-8")
 
@@ -362,7 +371,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
         ranked_data = _extract_json(raw)
 
-        by_id = {n["id"]: n for n in candidates}
+        by_id = {n["id"]: n for n in groq_candidates}
         result = []
         ranked_ids = set()
         for item in ranked_data.get("ranked", []):
@@ -373,10 +382,16 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 result.append(norma)
                 ranked_ids.add(nid)
 
-        for n in candidates:
+        # Aggiungi eventuali norme di groq_candidates non restituite dal modello
+        for n in groq_candidates:
             if n["id"] not in ranked_ids:
                 n["ai_motivation"] = ""
                 result.append(n)
+
+        # Appendi le norme oltre il cap (senza motivazione AI)
+        for n in remaining:
+            n["ai_motivation"] = ""
+            result.append(n)
 
         return result
 
