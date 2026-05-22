@@ -17,6 +17,7 @@
       --color-conv-bg:#f0f7ee; --color-conv-border:#a8d49a; --color-conv-text:#2a6020;
       --color-ai-bg:#f0f7ff; --color-ai-border:#bdd6f0; --color-ai-text:#1a4a7a;
       --shadow-sm:0 1px 3px oklch(0.2 0.01 80/0.07); --shadow-md:0 4px 16px oklch(0.2 0.01 80/0.09);
+      --shadow-lg:0 8px 40px oklch(0.2 0.01 80/0.18);
       --radius-sm:0.375rem; --radius-md:0.5rem; --radius-lg:0.75rem; --radius-xl:1rem; --radius-full:9999px;
       --space-1:0.25rem;--space-2:0.5rem;--space-3:0.75rem;--space-4:1rem;
       --space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;
@@ -38,6 +39,7 @@
       --color-conv-bg:#1a2e18;--color-conv-border:#3a6a32;--color-conv-text:#7ac06a;
       --color-ai-bg:#0f1e2e;--color-ai-border:#1e3a5a;--color-ai-text:#7ab3e0;
       --shadow-sm:0 1px 3px oklch(0 0 0/0.25);--shadow-md:0 4px 16px oklch(0 0 0/0.35);
+      --shadow-lg:0 8px 40px oklch(0 0 0/0.55);
     }
     @media(prefers-color-scheme:dark){:root:not([data-theme]){
       --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#242320;
@@ -48,6 +50,7 @@
       --color-conv-bg:#1a2e18;--color-conv-border:#3a6a32;--color-conv-text:#7ac06a;
       --color-ai-bg:#0f1e2e;--color-ai-border:#1e3a5a;--color-ai-text:#7ab3e0;
       --shadow-sm:0 1px 3px oklch(0 0 0/0.25);--shadow-md:0 4px 16px oklch(0 0 0/0.35);
+      --shadow-lg:0 8px 40px oklch(0 0 0/0.55);
     }}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
@@ -90,7 +93,6 @@
     .importo-banner{display:none;margin-top:var(--space-3);padding:var(--space-2) var(--space-4);background:var(--color-badge-bg);border-radius:var(--radius-md);font-size:var(--text-xs);font-weight:600;color:var(--color-primary);border:1px solid oklch(from var(--color-primary) l c h/0.2)}
     .importo-banner.conv{background:var(--color-conv-bg);color:var(--color-conv-text);border-color:var(--color-conv-border)}
 
-    /* ── Convenzione checkbox row ── */
     .conv-row{grid-column:1/-1;display:flex;align-items:flex-start;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--color-surface-offset);border:1px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;transition:border-color var(--transition),background var(--transition)}
     .conv-row:hover{border-color:var(--color-conv-border);background:var(--color-conv-bg)}
     .conv-row.checked{border-color:var(--color-conv-border);background:var(--color-conv-bg)}
@@ -122,7 +124,6 @@
     .results-header h2{font-family:var(--font-display);font-size:var(--text-lg);color:var(--color-text)}
     .results-count{font-size:var(--text-sm);color:var(--color-text-muted);background:var(--color-surface-offset);border-radius:var(--radius-full);padding:2px var(--space-3);font-weight:600}
 
-    /* badge convenzione nei risultati */
     .badge-conv{background:var(--color-conv-bg);color:var(--color-conv-text);border:1px solid var(--color-conv-border)}
 
     .result-card{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5) var(--space-6);margin-bottom:var(--space-4);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition),transform var(--transition)}
@@ -133,7 +134,6 @@
     .result-title{font-family:var(--font-display);font-size:1.1rem;color:var(--color-text);margin-bottom:var(--space-2);line-height:1.3}
     .result-desc{font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.6;margin-bottom:var(--space-3)}
 
-    /* ── AI motivation box ── */
     .ai-motivation{display:flex;align-items:flex-start;gap:var(--space-2);margin-bottom:var(--space-3);padding:var(--space-3) var(--space-4);background:var(--color-ai-bg);border:1px solid var(--color-ai-border);border-radius:var(--radius-md)}
     .ai-motivation-icon{font-size:0.85rem;flex-shrink:0;margin-top:2px}
     .ai-motivation-text{font-size:var(--text-xs);color:var(--color-ai-text);line-height:1.55;font-style:italic}
@@ -147,11 +147,110 @@
     .btn-link:hover{background:var(--color-primary-light);text-decoration:none;color:var(--color-primary-hover)}
     .btn-link.secondary{color:var(--color-text-muted);border-color:var(--color-border)}
     .btn-link.secondary:hover{background:var(--color-surface-offset);color:var(--color-text)}
+    .btn-link.detail{color:var(--color-text-muted);border-color:var(--color-border);gap:var(--space-2)}
+    .btn-link.detail:hover{background:var(--color-surface-offset);color:var(--color-text)}
 
     .state-box{text-align:center;padding:var(--space-12) var(--space-8);color:var(--color-text-muted);display:none}
     .state-box .icon{font-size:2.5rem;margin-bottom:var(--space-3)}
     .state-box h3{color:var(--color-text);margin-bottom:var(--space-2);font-size:var(--text-base)}
     .state-box p{font-size:var(--text-sm);max-width:45ch;margin:0 auto}
+
+    /* ═══════════════════════════════════════════════
+       SCHEDA DETTAGLIO — overlay + pannello slide-in
+       ═══════════════════════════════════════════════ */
+    #detail-overlay{
+      position:fixed;inset:0;background:oklch(0.15 0.01 80/0);
+      z-index:200;pointer-events:none;
+      transition:background 300ms cubic-bezier(0.16,1,0.3,1);
+    }
+    #detail-overlay.open{
+      background:oklch(0.15 0.01 80/0.55);
+      pointer-events:auto;
+    }
+    #detail-panel{
+      position:fixed;top:0;right:0;bottom:0;
+      width:min(520px, 100vw);
+      background:var(--color-surface-2);
+      border-left:1px solid var(--color-border);
+      box-shadow:var(--shadow-lg);
+      z-index:201;
+      transform:translateX(100%);
+      transition:transform 320ms cubic-bezier(0.16,1,0.3,1);
+      display:flex;flex-direction:column;
+      overflow:hidden;
+    }
+    #detail-panel.open{transform:translateX(0)}
+
+    .dp-header{
+      display:flex;align-items:flex-start;justify-content:space-between;
+      padding:var(--space-6) var(--space-6) var(--space-5);
+      border-bottom:1px solid var(--color-divider);
+      flex-shrink:0;
+      gap:var(--space-4);
+    }
+    .dp-header-info{flex:1;min-width:0}
+    .dp-estremi{font-size:var(--text-xs);font-weight:600;color:var(--color-primary);
+      background:var(--color-badge-bg);border:1px solid oklch(from var(--color-primary) l c h/0.2);
+      border-radius:var(--radius-full);padding:3px var(--space-3);
+      display:inline-block;margin-bottom:var(--space-3)}
+    .dp-title{font-family:var(--font-display);font-size:1.25rem;line-height:1.25;color:var(--color-text);margin-bottom:0}
+    .dp-close{
+      flex-shrink:0;background:none;border:1px solid var(--color-border);
+      border-radius:var(--radius-full);width:36px;height:36px;
+      display:flex;align-items:center;justify-content:center;
+      color:var(--color-text-muted);transition:background var(--transition),color var(--transition);
+      margin-top:2px;
+    }
+    .dp-close:hover{background:var(--color-surface-offset);color:var(--color-text)}
+
+    .dp-body{flex:1;overflow-y:auto;padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6)}
+    .dp-body::-webkit-scrollbar{width:6px}
+    .dp-body::-webkit-scrollbar-track{background:transparent}
+    .dp-body::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:var(--radius-full)}
+
+    .dp-section-label{font-size:var(--text-xs);font-weight:700;color:var(--color-text-muted);
+      text-transform:uppercase;letter-spacing:.07em;margin-bottom:var(--space-3)}
+    .dp-desc{font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.7}
+
+    /* Accordion articoli */
+    .dp-articoli{display:flex;flex-direction:column;gap:var(--space-2)}
+    .dp-art-item{border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;
+      transition:border-color var(--transition)}
+    .dp-art-item.open{border-color:oklch(from var(--color-primary) l c h/0.35)}
+    .dp-art-trigger{
+      width:100%;text-align:left;background:none;border:none;
+      padding:var(--space-3) var(--space-4);
+      display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+      cursor:pointer;transition:background var(--transition);
+    }
+    .dp-art-trigger:hover{background:var(--color-surface-offset)}
+    .dp-art-item.open .dp-art-trigger{background:var(--color-primary-light)}
+    .dp-art-label{font-size:var(--text-sm);font-weight:600;color:var(--color-text);line-height:1.4;flex:1}
+    .dp-art-item.open .dp-art-label{color:var(--color-primary)}
+    .dp-art-chevron{flex-shrink:0;color:var(--color-text-faint);transition:transform 220ms cubic-bezier(0.16,1,0.3,1)}
+    .dp-art-item.open .dp-art-chevron{transform:rotate(180deg);color:var(--color-primary)}
+    .dp-art-content{
+      max-height:0;overflow:hidden;
+      transition:max-height 280ms cubic-bezier(0.16,1,0.3,1), padding 220ms;
+      padding:0 var(--space-4);
+    }
+    .dp-art-item.open .dp-art-content{max-height:500px;padding:0 var(--space-4) var(--space-4)}
+    .dp-art-text{font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.75;
+      border-top:1px solid var(--color-divider);padding-top:var(--space-3);margin-top:0}
+    .dp-art-empty{font-size:var(--text-xs);color:var(--color-text-faint);font-style:italic}
+
+    .dp-footer{
+      flex-shrink:0;padding:var(--space-5) var(--space-6);
+      border-top:1px solid var(--color-divider);
+      display:flex;gap:var(--space-3);flex-wrap:wrap;
+      background:var(--color-surface);
+    }
+    .dp-footer .btn-link{flex:1;justify-content:center;min-width:140px}
+
+    /* Loading state nel pannello */
+    .dp-loading{display:flex;flex-direction:column;gap:var(--space-4);padding:var(--space-6)}
+    .dp-sk{border-radius:var(--radius-sm)}
+
     footer{text-align:center;padding:var(--space-8);font-size:var(--text-xs);color:var(--color-text-faint);border-top:1px solid var(--color-divider)}
     footer a{color:var(--color-text-faint)}
     footer a:hover{color:var(--color-text-muted)}
@@ -209,232 +308,392 @@
             <label for="importo">Importo previsto (€)</label>
             <input type="text" id="importo" name="importo" placeholder="es. 12.000">
             <span class="hint">Determina la soglia procedurale applicabile</span>
-            <div class="importo-banner" id="importoBanner" aria-live="polite"></div>
           </div>
-
-          <!-- Convenzione Consip / MEPA -->
+          <div class="form-group full">
+            <label for="oggetto">Oggetto dell'atto</label>
+            <input type="text" id="oggetto" name="oggetto" placeholder="es. Acquisto licenze software gestionale">
+          </div>
+          <!-- Convenzione checkbox -->
           <label class="conv-row" id="convRow" for="convenzione">
             <input type="checkbox" id="convenzione" name="convenzione">
             <div class="conv-row-text">
-              <span class="conv-row-label">Adesione a convenzione Consip / Ordine su MEPA</span>
-              <span class="conv-row-hint">La procedura di gara è già assolta dalla convenzione quadro — si applicano art. 1 co. 449 L. 296/2006 e art. 26 L. 488/1999 invece delle soglie D.Lgs. 36/2023</span>
+              <span class="conv-row-label">Adesione a Convenzione Consip / Ordine su MEPA</span>
+              <span class="conv-row-hint">La procedura di gara è già assolta dalla convenzione quadro — nessuna gara autonoma richiesta</span>
             </div>
           </label>
-
           <div class="form-group full">
-            <label for="oggetto">Oggetto / Titolo dell'atto</label>
-            <input type="text" id="oggetto" name="oggetto" placeholder="es. Acquisto licenze software gestionale">
-          </div>
-          <div class="form-group full">
-            <label for="testo">Descrivi l'esigenza <span class="req">*</span></label>
-            <textarea id="testo" name="testo" placeholder="es. Devo procedere all'acquisto di software per la gestione documentale del Comune, importo sotto soglia, affidamento diretto su MEPA..." required></textarea>
+            <label for="testo">Descrizione esigenza <span class="req">*</span></label>
+            <textarea id="testo" name="testo" placeholder="Descrivi cosa stai acquistando, il contesto normativo rilevante, eventuali vincoli…" required></textarea>
           </div>
         </div>
-        <div class="kw-box" id="kwBox" aria-live="polite">
-          <div class="kw-label">Concetti rilevati</div>
-          <div class="pills" id="kwPills"></div>
-        </div>
-        <button type="submit" class="btn-primary" id="searchBtn">
-          <span class="spinner" id="spinner" aria-hidden="true"></span>
-          <span id="btnText">🔍 Cerca norme</span>
+        <div class="importo-banner" id="importoBanner"></div>
+        <button type="submit" class="btn-primary" id="submitBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <span id="btnText">Cerca norme applicabili</span>
+          <div class="spinner" id="spinner" aria-hidden="true"></div>
         </button>
       </form>
     </div>
 
-    <div id="skeletonSection" style="display:none" aria-hidden="true">
-      <div class="sk-card"><div class="sk-badge skeleton"></div><div class="sk-title skeleton"></div><div class="sk-line skeleton" style="width:90%"></div><div class="sk-line skeleton" style="width:65%"></div></div>
-      <div class="sk-card"><div class="sk-badge skeleton"></div><div class="sk-title skeleton" style="width:60%"></div><div class="sk-line skeleton"></div><div class="sk-line skeleton" style="width:75%"></div></div>
-      <div class="sk-card"><div class="sk-badge skeleton"></div><div class="sk-title skeleton" style="width:75%"></div><div class="sk-line skeleton" style="width:80%"></div><div class="sk-line skeleton" style="width:55%"></div></div>
+    <div id="kw-box" class="kw-box" aria-live="polite">
+      <div class="kw-label">Parole chiave rilevate</div>
+      <div class="pills" id="kwPills"></div>
     </div>
 
-    <section id="results-section" aria-label="Risultati ricerca normativa">
+    <div id="results-section" aria-live="polite">
       <div class="results-header">
         <h2>Norme applicabili</h2>
-        <span class="results-count" id="resultsCount">0 norme</span>
+        <span class="results-count" id="resultsCount"></span>
       </div>
+      <div id="skeletons" aria-hidden="true"></div>
       <div id="resultsList"></div>
-    </section>
-
-    <div class="state-box" id="emptyState">
-      <div class="icon" aria-hidden="true">📄</div>
-      <h3>Nessun risultato</h3>
-      <p>Prova ad aggiungere più dettagli sull'esigenza, l'oggetto o il tipo di atto.</p>
     </div>
-    <div class="state-box" id="errorState">
-      <div class="icon" aria-hidden="true">⚠️</div>
-      <h3>Errore nella ricerca</h3>
-      <p id="errorMsg">Riprova tra qualche secondo.</p>
+
+    <div class="state-box" id="errorBox" role="alert">
+      <div class="icon">⚠️</div>
+      <h3>Si è verificato un errore</h3>
+      <p id="errorMsg">Riprova tra qualche istante.</p>
+    </div>
+    <div class="state-box" id="emptyBox">
+      <div class="icon">🔍</div>
+      <h3>Nessuna norma trovata</h3>
+      <p>Prova ad aggiungere più dettagli sulla tua esigenza amministrativa.</p>
     </div>
   </main>
 
+  <!-- ══════════════════════════════════════
+       SCHEDA DETTAGLIO — overlay + pannello
+       ══════════════════════════════════════ -->
+  <div id="detail-overlay" role="presentation" aria-hidden="true"></div>
+  <aside id="detail-panel" role="dialog" aria-modal="true" aria-label="Scheda dettaglio norma" tabindex="-1">
+    <div class="dp-header">
+      <div class="dp-header-info">
+        <div class="dp-estremi" id="dp-estremi">—</div>
+        <h2 class="dp-title" id="dp-title">—</h2>
+      </div>
+      <button class="dp-close" id="dp-close" aria-label="Chiudi scheda dettaglio">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="dp-body" id="dp-body">
+      <!-- contenuto iniettato via JS -->
+    </div>
+    <div class="dp-footer" id="dp-footer" style="display:none">
+      <a class="btn-link" id="dp-link-norma" href="#" target="_blank" rel="noopener noreferrer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Leggi su Normattiva
+      </a>
+      <a class="btn-link secondary" id="dp-link-search" href="#" target="_blank" rel="noopener noreferrer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Cerca su Normattiva
+      </a>
+    </div>
+  </aside>
+
   <footer>
-    Dati normativi da <a href="https://www.normattiva.it" target="_blank" rel="noopener">Normattiva</a> —
-    Licenza <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> —
-    <a href="https://github.com/enricobrunazzo/normattiva" target="_blank" rel="noopener">GitHub</a>
+    <p>Strumento di supporto per funzionari PA — non costituisce parere legale.
+      Dati normativi aggiornati a maggio 2026.
+      <a href="https://www.normattiva.it" target="_blank" rel="noopener noreferrer">Normattiva.it</a>
+    </p>
   </footer>
 
   <script>
-  /* theme toggle */
+  // ── Tema ──────────────────────────────────────────────────────────────────────
   (function(){
-    const btn=document.querySelector('[data-theme-toggle]'),html=document.documentElement;
+    const t=document.querySelector('[data-theme-toggle]'), r=document.documentElement;
     let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
-    html.setAttribute('data-theme',d);upd();
-    btn.addEventListener('click',()=>{d=d==='dark'?'light':'dark';html.setAttribute('data-theme',d);upd();});
-    function upd(){
-      btn.setAttribute('aria-label',d==='dark'?'Attiva modalità chiara':'Attiva modalità scura');
-      btn.innerHTML=d==='dark'
-        ?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
-        :'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    r.setAttribute('data-theme',d);
+    const sunSvg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    const moonSvg='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    if(t){
+      t.innerHTML = d==='dark'?sunSvg:moonSvg;
+      t.addEventListener('click',()=>{
+        d=d==='dark'?'light':'dark';
+        r.setAttribute('data-theme',d);
+        t.setAttribute('aria-label','Attiva modalità '+(d==='dark'?'chiara':'scura'));
+        t.innerHTML=d==='dark'?sunSvg:moonSvg;
+      });
     }
   })();
 
-  /* importo banner live — aggiornato per gestire convenzione */
-  const importoEl=document.getElementById('importo');
-  const importoBanner=document.getElementById('importoBanner');
-  const convCheckbox=document.getElementById('convenzione');
-  const convRow=document.getElementById('convRow');
-  const SOGLIE=[
-    {max:5000,    label:'Affidamento diretto semplificato — art. 50 co.1, D.Lgs. 36/2023'},
-    {max:140000,  label:'Affidamento diretto — art. 50, D.Lgs. 36/2023'},
-    {max:215000,  label:'Procedura negoziata — art. 72, D.Lgs. 36/2023'},
-    {max:Infinity,label:'Procedura aperta — art. 71, D.Lgs. 36/2023'},
-  ];
-  const LABEL_CONV='Adesione a convenzione Consip / Ordine su MEPA — art. 1 co. 449 L. 296/2006';
+  // ── Importo banner ────────────────────────────────────────────────────────────
+  const importoInput = document.getElementById('importo');
+  const importoBanner = document.getElementById('importoBanner');
+  const convRow = document.getElementById('convRow');
+  const convCb = document.getElementById('convenzione');
 
-  function updateBanner(){
-    const v=parseFloat(importoEl.value.replace(/[.,\s€]/g,''));
-    const isConv=convCheckbox.checked;
-    if(isNaN(v)&&!isConv){importoBanner.style.display='none';return;}
+  function updateImportoBanner(){
+    const raw = importoInput.value.trim();
+    const isConv = convCb.checked;
+    const val = parseFloat(raw.replace(/\./g,'').replace(',','.').replace('€','')) || 0;
+    if(!raw){ importoBanner.style.display='none'; return; }
+    let msg='', isConvClass=false;
     if(isConv){
-      importoBanner.classList.add('conv');
-      importoBanner.textContent=isNaN(v)?LABEL_CONV:`€${v.toLocaleString('it-IT')} — ${LABEL_CONV}`;
+      msg=`€${val.toLocaleString('it-IT')} — Adesione convenzione Consip / Ordine MEPA (art. 1 co. 449 L. 296/2006)`;
+      isConvClass=true;
+    } else if(val<=5000){
+      msg=`€${val.toLocaleString('it-IT')} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)`;
+    } else if(val<=140000){
+      msg=`€${val.toLocaleString('it-IT')} — Affidamento diretto (art. 50, D.Lgs. 36/2023)`;
+    } else if(val<=215000){
+      msg=`€${val.toLocaleString('it-IT')} — Procedura negoziata (art. 72, D.Lgs. 36/2023)`;
     } else {
-      importoBanner.classList.remove('conv');
-      const soglia=SOGLIE.find(s=>v<=s.max);
-      importoBanner.textContent=`€${v.toLocaleString('it-IT')} — ${soglia.label}`;
+      msg=`€${val.toLocaleString('it-IT')} — Procedura aperta (art. 71, D.Lgs. 36/2023)`;
     }
+    importoBanner.textContent=msg;
     importoBanner.style.display='block';
+    importoBanner.className='importo-banner'+(isConvClass?' conv':'');
   }
-  importoEl.addEventListener('input',updateBanner);
-  convCheckbox.addEventListener('change',()=>{
-    convRow.classList.toggle('checked',convCheckbox.checked);
-    updateBanner();
-    updateKw();
+  importoInput.addEventListener('input', updateImportoBanner);
+  convCb.addEventListener('change', ()=>{
+    convRow.classList.toggle('checked', convCb.checked);
+    updateImportoBanner();
   });
 
-  /* keyword preview */
-  const testoEl=document.getElementById('testo'),oggettoEl=document.getElementById('oggetto'),tipoEl=document.getElementById('tipo_atto');
-  const kwBox=document.getElementById('kwBox'),kwPills=document.getElementById('kwPills');
-  const SEM={
-    acquisto:['D.Lgs. 36/2023','L. 136/2010'],software:['CAD','D.Lgs. 82/2005'],
-    cloud:['AgID','PNRR'],hardware:['D.Lgs. 36/2023'],servizi:['appalto','CIG'],
-    privacy:['GDPR','D.Lgs. 196/2003'],dati:['GDPR'],trasparenza:['D.Lgs. 33/2013'],
-    gara:['D.Lgs. 36/2023','CIG'],appalto:['CIG','RUP'],mepa:['MEPA','Consip'],
-    comune:['TUEL','D.Lgs. 267/2000'],pnrr:['PNRR','CUP'],sicurezza:['D.Lgs. 81/2008'],
-    consulenza:['D.Lgs. 165/2001'],formazione:['D.Lgs. 165/2001'],bilancio:['D.Lgs. 118/2011'],
-    cig:['L. 136/2010','D.Lgs. 36/2023'],cup:['L. 136/2010','PNRR'],
-    affidamento:['D.Lgs. 36/2023','CIG'],conflitto:['L. 190/2012 art.1 co.41'],
-    convenzione:['L. 296/2006 art.1 co.449','L. 488/1999 art.26','Consip'],
-    consip:['L. 296/2006 art.1 co.449','L. 488/1999 art.26'],
-  };
-  function updateKw(){
-    const found=new Set();
-    const full=`${testoEl.value} ${oggettoEl.value}`.toLowerCase();
-    for(const[k,vs]of Object.entries(SEM)){if(full.includes(k))vs.forEach(v=>found.add(v));}
-    if(tipoEl.value==='determina'){found.add('D.Lgs. 36/2023');found.add('TUEL art.192');found.add('L. 136/2010');}
-    if(convCheckbox.checked){found.add('L. 296/2006 art.1 co.449');found.add('L. 488/1999 art.26');found.add('Consip/MEPA');}
-    if(found.size===0){kwBox.style.display='none';return;}
-    kwBox.style.display='block';
-    kwPills.innerHTML=[...found].slice(0,12).map(k=>`<span class="pill">${k}</span>`).join('');
-  }
-  [testoEl,oggettoEl,tipoEl,importoEl].forEach(el=>el.addEventListener('input',updateKw));
+  // ── Ricerca ───────────────────────────────────────────────────────────────────
+  const form = document.getElementById('searchForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const btnText = document.getElementById('btnText');
+  const spinner = document.getElementById('spinner');
+  const resultsSection = document.getElementById('results-section');
+  const resultsList = document.getElementById('resultsList');
+  const resultsCount = document.getElementById('resultsCount');
+  const skeletons = document.getElementById('skeletons');
+  const errorBox = document.getElementById('errorBox');
+  const errorMsg = document.getElementById('errorMsg');
+  const emptyBox = document.getElementById('emptyBox');
+  const aiBadge = document.getElementById('aiBadge');
+  const kwBox = document.getElementById('kw-box');
+  const kwPills = document.getElementById('kwPills');
 
-  /* search */
-  const form=document.getElementById('searchForm');
-  const btn=document.getElementById('searchBtn'),btnTxt=document.getElementById('btnText'),spinner=document.getElementById('spinner');
-  const skeleton=document.getElementById('skeletonSection');
-  const resultsSection=document.getElementById('results-section'),resultsList=document.getElementById('resultsList'),resultsCount=document.getElementById('resultsCount');
-  const emptyState=document.getElementById('emptyState'),errorState=document.getElementById('errorState'),errorMsg=document.getElementById('errorMsg');
-  const aiBadge=document.getElementById('aiBadge');
-
-  function setLoading(on){
-    btn.disabled=on;spinner.style.display=on?'block':'none';
-    btnTxt.textContent=on?'Ricerca in corso…':'🔍 Cerca norme';
-    skeleton.style.display=on?'block':'none';
-    resultsSection.style.display='none';emptyState.style.display='none';errorState.style.display='none';
+  function showSkeletons(n=3){
+    skeletons.innerHTML=Array.from({length:n}).map(()=>`
+      <div class="sk-card" aria-hidden="true">
+        <div class="skeleton sk-badge"></div>
+        <div class="skeleton sk-title"></div>
+        <div class="skeleton sk-line" style="width:90%"></div>
+        <div class="skeleton sk-line" style="width:75%"></div>
+        <div class="skeleton sk-line" style="width:55%"></div>
+      </div>`).join('');
   }
 
-  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function hideSkeletons(){ skeletons.innerHTML=''; }
 
   function renderResults(data){
-    skeleton.style.display='none';
-    if(data.ai_active){aiBadge.classList.add('active');}else{aiBadge.classList.remove('active');}
-    const{results=[]}=data;
-    if(results.length===0){emptyState.style.display='block';return;}
-    resultsSection.style.display='block';
-    resultsCount.textContent=`${results.length} norm${results.length!==1?'e':'a'}`;
+    hideSkeletons();
+    resultsList.innerHTML='';
+    const r = data.results || [];
+    resultsCount.textContent = r.length === 1 ? '1 norma' : `${r.length} norme`;
 
-    // banner importo/convenzione sopra i risultati
-    const ilabel=data.importo_label;
-    const ilabelHtml=ilabel
-      ?`<div style="margin-bottom:var(--space-4);padding:var(--space-2) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-xs);font-weight:600;border:1px solid;${data.convenzione?'background:var(--color-conv-bg);color:var(--color-conv-text);border-color:var(--color-conv-border)':'background:var(--color-badge-bg);color:var(--color-primary);border-color:oklch(from var(--color-primary) l c h/0.2)'}">
-          ${data.convenzione?'🤝 ':'📊 '}${esc(ilabel)}
-        </div>`
-      :'';
+    if(r.length===0){ emptyBox.style.display='block'; return; }
+    emptyBox.style.display='none';
 
-    resultsList.innerHTML=ilabelHtml+results.map(r=>{
-      const aiBlock=r.ai_motivation
-        ?`<div class="ai-motivation" role="note" aria-label="Motivazione AI">
-            <span class="ai-motivation-icon" aria-hidden="true">✦</span>
-            <span class="ai-motivation-text">${esc(r.ai_motivation)}</span>
+    r.forEach(norma => {
+      const isConv = data.convenzione;
+      const badgeClass = isConv ? 'badge-conv' : 'badge-estremi';
+
+      const articoliHtml = norma.articoli_chiave && norma.articoli_chiave.length
+        ? `<div class="articoli">
+            <div class="articoli-label">Articoli chiave</div>
+            <div class="articoli-list">
+              ${norma.articoli_chiave.map(a=>`<span class="art-chip">${a}</span>`).join('')}
+            </div>
           </div>`
-        :'';
-      const articoli=r.articoli_chiave&&r.articoli_chiave.length
-        ?`<div class="articoli"><div class="articoli-label">Articoli chiave</div><div class="articoli-list">${r.articoli_chiave.map(a=>`<span class="art-chip">${esc(a)}</span>`).join('')}</div></div>`
-        :'';
-      const btnTesto=r.url_normattiva&&r.url_normattiva!==r.url_ricerca
-        ?`<a class="btn-link" href="${esc(r.url_normattiva)}" target="_blank" rel="noopener">📌 Vai all'atto <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg></a>`:'';
-      return `<article class="result-card">
+        : '';
+
+      const aiHtml = norma.ai_motivation
+        ? `<div class="ai-motivation">
+            <span class="ai-motivation-icon">✦</span>
+            <span class="ai-motivation-text">${norma.ai_motivation}</span>
+          </div>`
+        : '';
+
+      const card = document.createElement('article');
+      card.className = 'result-card';
+      card.innerHTML = `
         <div class="result-meta">
-          <span class="badge badge-estremi">${esc(r.estremi)}</span>
+          <span class="badge ${badgeClass}">${norma.estremi}</span>
         </div>
-        <h3 class="result-title">${esc(r.titolo)}</h3>
-        <p class="result-desc">${esc(r.descrizione)}</p>
-        ${aiBlock}
-        ${articoli}
+        <h3 class="result-title">${norma.titolo}</h3>
+        ${aiHtml}
+        <p class="result-desc">${norma.descrizione}</p>
+        ${articoliHtml}
         <div class="result-actions">
-          ${btnTesto}
-          <a class="btn-link secondary" href="${esc(r.url_ricerca)}" target="_blank" rel="noopener">🔍 Cerca su Normattiva <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg></a>
-        </div>
-      </article>`;
-    }).join('');
+          <a class="btn-link" href="${norma.url_normattiva}" target="_blank" rel="noopener noreferrer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Apri Normattiva
+          </a>
+          <a class="btn-link secondary" href="${norma.url_ricerca}" target="_blank" rel="noopener noreferrer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Ricerca
+          </a>
+          <button class="btn-link detail" data-norma-id="${norma.id}" aria-label="Scheda dettaglio: ${norma.titolo}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Dettaglio
+          </button>
+        </div>`;
+      resultsList.appendChild(card);
+    });
+
+    // delegated click sui pulsanti "Dettaglio"
+    resultsList.querySelectorAll('[data-norma-id]').forEach(btn => {
+      btn.addEventListener('click', () => openDetail(btn.dataset.normaId));
+    });
   }
 
-  form.addEventListener('submit',async e=>{
+  form.addEventListener('submit', async e => {
     e.preventDefault();
-    const testo=testoEl.value.trim();
-    if(!testo){testoEl.focus();testoEl.style.borderColor='var(--color-warning)';setTimeout(()=>testoEl.style.borderColor='',2000);return;}
-    setLoading(true);
-    const p=new URLSearchParams({
+    const testo = document.getElementById('testo').value.trim();
+    const oggetto = document.getElementById('oggetto').value.trim();
+    if(!testo && !oggetto){ document.getElementById('testo').focus(); return; }
+
+    submitBtn.disabled=true;
+    btnText.textContent='Ricerca in corso…';
+    spinner.style.display='block';
+    errorBox.style.display='none';
+    emptyBox.style.display='none';
+    resultsSection.style.display='block';
+    kwBox.style.display='none';
+    showSkeletons();
+    resultsList.innerHTML='';
+
+    const params = new URLSearchParams({
       testo,
-      tipo_atto:tipoEl.value,
-      oggetto:oggettoEl.value,
-      importo:importoEl.value,
-      convenzione:convCheckbox.checked?'true':'false',
+      tipo_atto: document.getElementById('tipo_atto').value,
+      oggetto,
+      importo: document.getElementById('importo').value,
+      convenzione: convCb.checked ? 'true' : 'false',
     });
-    try{
-      const res=await fetch(`/api/search?${p}`);
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error||'Errore server');
+
+    try {
+      const res = await fetch(`/api/search?${params}`);
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
+
+      aiBadge.classList.toggle('active', !!data.ai_active);
+
+      if(data.keywords && data.keywords.length){
+        kwPills.innerHTML = data.keywords.map(k=>`<span class="pill">${k}</span>`).join('');
+        kwBox.style.display='block';
+      }
       renderResults(data);
-    }catch(err){
-      skeleton.style.display='none';
-      errorMsg.textContent=err.message||'Errore. Riprova.';
-      errorState.style.display='block';
-    }finally{
-      btn.disabled=false;spinner.style.display='none';btnTxt.textContent='🔍 Cerca norme';
+    } catch(err){
+      hideSkeletons();
+      errorMsg.textContent = err.message || 'Errore di rete. Riprova.';
+      errorBox.style.display='block';
+      resultsSection.style.display='none';
+    } finally {
+      submitBtn.disabled=false;
+      btnText.textContent='Cerca norme applicabili';
+      spinner.style.display='none';
     }
   });
+
+  // ── Scheda dettaglio ──────────────────────────────────────────────────────────
+  const overlay    = document.getElementById('detail-overlay');
+  const panel      = document.getElementById('detail-panel');
+  const dpEstremi  = document.getElementById('dp-estremi');
+  const dpTitle    = document.getElementById('dp-title');
+  const dpBody     = document.getElementById('dp-body');
+  const dpFooter   = document.getElementById('dp-footer');
+  const dpLinkN    = document.getElementById('dp-link-norma');
+  const dpLinkS    = document.getElementById('dp-link-search');
+  const dpClose    = document.getElementById('dp-close');
+
+  function openDetail(normaId) {
+    // reset
+    dpBody.innerHTML = `<div class="dp-loading">
+      <div class="skeleton dp-sk" style="height:14px;width:60%"></div>
+      <div class="skeleton dp-sk" style="height:14px;width:90%"></div>
+      <div class="skeleton dp-sk" style="height:14px;width:75%"></div>
+      <div class="skeleton dp-sk" style="height:14px;width:85%"></div>
+      <div class="skeleton dp-sk" style="height:14px;width:50%"></div>
+    </div>`;
+    dpFooter.style.display = 'none';
+    dpEstremi.textContent = '…';
+    dpTitle.textContent = '…';
+
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden', 'false');
+    panel.classList.add('open');
+    panel.focus();
+
+    fetch(`/api/norma?id=${encodeURIComponent(normaId)}`)
+      .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error || `HTTP ${r.status}`)))
+      .then(norma => renderDetail(norma))
+      .catch(err => {
+        dpBody.innerHTML = `<div style="padding:var(--space-6);color:var(--color-text-muted);font-size:var(--text-sm)">
+          Impossibile caricare la scheda: ${err}
+        </div>`;
+      });
+  }
+
+  function renderDetail(norma) {
+    dpEstremi.textContent = norma.estremi;
+    dpTitle.textContent   = norma.titolo;
+
+    const articoli = norma.articoli_dettaglio || [];
+    const artsHtml = articoli.length
+      ? articoli.map((art, i) => `
+        <div class="dp-art-item" id="dp-art-${i}">
+          <button class="dp-art-trigger" aria-expanded="false" aria-controls="dp-art-content-${i}">
+            <span class="dp-art-label">${art.label}</span>
+            <svg class="dp-art-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="dp-art-content" id="dp-art-content-${i}" role="region">
+            ${art.testo
+              ? `<p class="dp-art-text">${art.testo}</p>`
+              : `<p class="dp-art-text dp-art-empty">Testo non disponibile — consulta Normattiva per il testo vigente.</p>`
+            }
+          </div>
+        </div>`).join('')
+      : `<p style="font-size:var(--text-sm);color:var(--color-text-faint);font-style:italic">
+          Nessun articolo chiave disponibile.
+        </p>`;
+
+    dpBody.innerHTML = `
+      <div>
+        <div class="dp-section-label">Descrizione</div>
+        <p class="dp-desc">${norma.descrizione}</p>
+      </div>
+      <div>
+        <div class="dp-section-label">Articoli chiave</div>
+        <div class="dp-articoli">${artsHtml}</div>
+      </div>`;
+
+    // accordion
+    dpBody.querySelectorAll('.dp-art-trigger').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.dp-art-item');
+        const isOpen = item.classList.contains('open');
+        // chiudi tutti
+        dpBody.querySelectorAll('.dp-art-item.open').forEach(el => {
+          el.classList.remove('open');
+          el.querySelector('.dp-art-trigger').setAttribute('aria-expanded','false');
+        });
+        if(!isOpen){
+          item.classList.add('open');
+          btn.setAttribute('aria-expanded','true');
+        }
+      });
+    });
+
+    // footer links
+    dpLinkN.href = norma.url_normattiva || '#';
+    dpLinkS.href = norma.url_ricerca    || '#';
+    dpFooter.style.display = 'flex';
+  }
+
+  function closeDetail() {
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden','true');
+    panel.classList.remove('open');
+  }
+
+  dpClose.addEventListener('click', closeDetail);
+  overlay.addEventListener('click', closeDetail);
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeDetail(); });
   </script>
 </body>
 </html>
