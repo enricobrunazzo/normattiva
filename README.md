@@ -14,8 +14,9 @@ Inserisci un'esigenza amministrativa in linguaggio naturale (es. *"devo acquista
 |---|---|
 | **Frontend** | HTML / CSS / Vanilla JS (zero dipendenze) |
 | **Backend** | Python serverless — `api/search.py` (Vercel Functions) |
-| **AI ranking** | [Groq](https://console.groq.com) — Llama 3.3 70B (free tier) |
-| **Motore tag** | Pre-filtro semantico interno (stdlib Python, zero latenza) |
+| **AI (espansione query)** | [Groq](https://console.groq.com) — Llama 3.3 70B — Stadio 0 |
+| **AI (ranking + motivazione)** | [Groq](https://console.groq.com) — Llama 3.3 70B — Stadio 2 |
+| **Motore tag** | Pre-filtro semantico interno (stdlib Python, zero latenza) — Stadio 1 |
 | **Fonte normativa** | [Normattiva](https://www.normattiva.it) — link diretti agli articoli |
 | **Hosting** | [Vercel Hobby](https://vercel.com) (gratuito) |
 
@@ -23,15 +24,24 @@ Inserisci un'esigenza amministrativa in linguaggio naturale (es. *"devo acquista
 
 ## Come funziona
 
-### Pipeline a due stadi
+### Pipeline a tre stadi
 
 ```
 Input utente (testo, tipo atto, importo, oggetto)
         ↓
+ [Stadio 0] Groq — Espansione semantica della query
+   • Riceve il testo in linguaggio naturale
+   • Traduce l'esigenza in tag canonici del sistema (max 15)
+   • Usa temperatura 0.0 per output deterministico
+   • Accetta SOLO tag presenti nel vocabolario del sistema
+   • Fallback silenzioso: se GROQ_API_KEY assente → lista vuota (Stadio 1 procede da solo)
+        ↓
  [Stadio 1] Motore tag-based
-   • Analisi tipo atto  → TIPO_ATTO_TAGS
-   • Analisi importo    → soglie D.Lgs. 36/2023
-   • Analisi semantica  → SEMANTIC_MAP + TAG_INDEX
+   • Analisi tipo atto  → TIPO_ATTO_TAGS          (+2 per match)
+   • Analisi importo    → soglie D.Lgs. 36/2023   (+3 per match)
+   • Tag espansi da Groq (Stadio 0)               (+3 per tag — score alto: semanticamente validati)
+   • Analisi testuale   → SEMANTIC_MAP + TAG_INDEX (+2 diretto, +1 semantico)
+   • Boost convenzione  → norme Consip/MEPA       (+4)
    • Output: lista candidati ordinati per score (min. score: 2)
         ↓
  [Stadio 2] Groq AI ranking (Llama 3.3 70B)
@@ -42,6 +52,8 @@ Input utente (testo, tipo atto, importo, oggetto)
         ↓
  Risultati con link Normattiva + etichetta importo + motivazione AI
 ```
+
+> **Perché tre stadi?** Il testo libero in linguaggio naturale contiene sinonimi, perifrasi e concetti impliciti che il matching testuale non coglie. Lo Stadio 0 "traduce" la query nel vocabolario del sistema *prima* del matching, migliorando significativamente il recall — soprattutto per query che non contengono le parole esatte dei tag (es. *"retta casa di riposo"* → espande in `rsa`, `isee-sociosanitario`, `compartecipazione`, `struttura-residenziale`).
 
 ### Soglie D.Lgs. 36/2023 applicate automaticamente
 
@@ -91,14 +103,14 @@ normattiva/
 ├── public/
 │   └── index.html          # Interfaccia utente (SPA, zero framework)
 ├── api/
-│   └── search.py           # Serverless function: tag engine + Groq ranking
+│   └── search.py           # Serverless function: Stadio 0 + tag engine + Groq ranking
 ├── vercel.json             # Routing Vercel (api/* → Python, resto → static)
 ├── requirements.txt        # Vuoto: solo stdlib Python (urllib, json, os)
 └── README.md
 ```
 
 > **Nessuna dipendenza esterna.** Il backend usa esclusivamente la standard library Python.
-> Le chiamate a Groq avvengono tramite `urllib.request` nativo.
+> Tutte le chiamate a Groq avvengono tramite `urllib.request` nativo.
 
 ---
 
@@ -132,6 +144,10 @@ GROQ_API_KEY=gsk_...
 **Groq free tier:** 14.400 token/minuto, nessuna carta di credito richiesta.
 Registrati su [console.groq.com](https://console.groq.com) e genera una API key gratuita.
 
+> **Nota token:** la pipeline a tre stadi effettua **due chiamate Groq** per ogni ricerca
+> (Stadio 0 espansione + Stadio 2 ranking). Il consumo stimato è ~400 token/query,
+> ben al di sotto dei limiti del free tier.
+
 ---
 
 ## Sviluppo locale
@@ -157,6 +173,7 @@ Le env vars nelle **serverless functions Python** di Vercel sono disponibili a r
 - Un **Redeploy da cache** (`vercel redeploy --reuse-build`) riusa il bundle già compilato e **non aggiorna** le variabili nel contesto di esecuzione
 - Un **nuovo build** (`vercel --prod` da CLI o push su branch) preleva sempre le variabili aggiornate
 - Il log `[INIT] GROQ_API_KEY present: True` nei Runtime Logs di Vercel conferma il corretto caricamento
+- Il log `[EXPAND] OK | elapsed=...s | tags=[...]` conferma che lo Stadio 0 funziona correttamente
 
 ---
 
@@ -169,9 +186,10 @@ Le env vars nelle **serverless functions Python** di Vercel sono disponibili a r
 - [x] Motivazione AI contestuale per ogni norma
 - [x] Soglie automatiche D.Lgs. 36/2023
 - [x] Modalità Convenzione Consip / MEPA con boost norme dedicate
-- [x] Log diagnostici runtime (`[INIT]`, `[GROQ]`, `[REQUEST]`)
+- [x] Log diagnostici runtime (`[INIT]`, `[GROQ]`, `[REQUEST]`, `[EXPAND]`)
 - [x] Copertura AI su tutte le norme del DB (GROQ_MAX_CANDIDATES = 12)
 - [x] Espansione database: L. 241/1990, D.Lgs. 50/2016, L. 296/2006, D.Lgs. 231/2001, AgID cloud, servizi sociali (L. 328/2000, DPCM 159/2013, L. 104/1992)
+- [x] **Stadio 0 — espansione semantica query via Groq** (traduzione in tag canonici prima del matching)
 - [ ] Scheda dettaglio norma con testo degli articoli chiave
 - [ ] Integrazione dati.normattiva.it open data API
 - [ ] Storico ricerche (localStorage)
