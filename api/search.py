@@ -27,12 +27,10 @@ SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
-# ── Numero massimo di candidati passati a Groq ────────────────────────────────
-# Aumentato a 12 per coprire settori specializzati (sociali, sanitari, ecc.)
+# ── Numero massimo di candidati passati a Groq (ranking) ─────────────────────
 GROQ_MAX_CANDIDATES = 12
 
 # ── Score minimo per entrare nel pool Groq ────────────────────────────────────
-# Abbassato da 4 a 2: evita di tagliare norme pertinenti con match parziale
 MIN_SCORE_FOR_GROQ = 2
 
 # ── Database normativo locale ──────────────────────────────────────────────────
@@ -308,9 +306,6 @@ NORMATIVE_DB = [
 ]
 
 # ── Costruzione TAG_INDEX ──────────────────────────────────────────────────────
-# Logica pulita: due indici separati senza side-effects incrociati.
-# TAG_INDEX      → tutte le norme NON convenzione_only
-# TAG_INDEX_CONV → solo le norme convenzione_only
 TAG_INDEX: dict = {}
 TAG_INDEX_CONV: dict = {}
 
@@ -461,6 +456,13 @@ STOP_WORDS = {
     "questo","questa","questi","queste","also","such",
 }
 
+# ── Lista di tutti i tag validi nel sistema (per lo Stadio 0) ─────────────────
+_ALL_VALID_TAGS = sorted(set(
+    tag
+    for norma in NORMATIVE_DB
+    for tag in norma["tags"]
+))
+
 
 # ── Helpers importo ────────────────────────────────────────────────────────────
 def _parse_importo(importo_str: str) -> float | None:
@@ -505,17 +507,88 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
         return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
+# ── Stadio 0: espansione semantica della query tramite Groq ───────────────────
+def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
+    """Chiede a Groq di tradurre la query in tag canonici del sistema.
+
+    Restituisce una lista di tag (stringhe) presenti in _ALL_VALID_TAGS.
+    In caso di errore o chiave assente, restituisce lista vuota (fallback
+    al solo matching testuale dello Stadio 1).
+    """
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        return []
+
+    tag_list_str = ", ".join(_ALL_VALID_TAGS)
+    full_query = f"{testo} {oggetto}".strip()
+
+    prompt = (
+        "Sei un esperto di diritto amministrativo italiano e di contratti pubblici.\n"
+        "Il tuo compito è analizzare la richiesta di un funzionario PA e restituire "
+        "SOLO i tag più rilevanti tra quelli forniti.\n\n"
+        f"Richiesta del funzionario:\n"
+        f"- Tipo atto: {tipo_atto or 'non specificato'}\n"
+        f"- Testo: {full_query}\n\n"
+        f"Tag disponibili nel sistema (scegli SOLO da questa lista):\n{tag_list_str}\n\n"
+        "Restituisci un oggetto JSON con al massimo 15 tag pertinenti, ordinati dal più al meno rilevante:\n"
+        "{\"tags\": [\"tag1\", \"tag2\", ...]}\n"
+        "Regole:\n"
+        "1. Scegli SOLO tag dalla lista fornita, senza inventarne di nuovi.\n"
+        "2. Includi tag che riflettono sinonimi, concetti correlati e implicazioni giuridiche della richiesta.\n"
+        "3. Se la richiesta è ambigua, includi i tag delle aree normative più probabilmente coinvolte.\n"
+        "4. Non aggiungere spiegazioni, solo il JSON."
+    )
+
+    try:
+        payload = json.dumps({
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 256,
+        }).encode()
+
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        t0 = time.time()
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode())
+        elapsed = time.time() - t0
+
+        raw_content = body["choices"][0]["message"]["content"]
+        data = _extract_json(raw_content)
+        expanded_tags = data.get("tags", [])
+
+        # Filtra: accetta solo tag presenti nel sistema
+        valid = [t for t in expanded_tags if t in set(_ALL_VALID_TAGS)]
+        print(f"[EXPAND] OK | elapsed={elapsed:.2f}s | tags={valid}", flush=True)
+        return valid
+
+    except Exception as exc:
+        print(f"[EXPAND ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return []
+
+
 # ── Motore tag (pre-filtro) ────────────────────────────────────────────────────
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
-                convenzione: bool = False) -> list:
+                convenzione: bool = False,
+                expanded_tags: list | None = None) -> list:
     """Pre-filtro: restituisce norme candidate ordinate per score tag.
 
     Logica score:
-    - tipo_atto match diretto:  +2
-    - importo soglia match:     +3
-    - token testo match diretto su TAG_INDEX: +2
-    - token testo match semantico:            +1
-    - boost convenzione su norme dedicate:    +4
+    - tipo_atto match diretto:      +2
+    - importo soglia match:         +3
+    - token testo match diretto:    +2
+    - token testo match semantico:  +1
+    - tag da espansione Groq (Stadio 0): +3
+    - boost convenzione:            +4
     """
     matched: dict = {}
 
@@ -523,13 +596,11 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
         norma = NORME_BY_ID.get(nid)
         if norma is None:
             return
-        # norme convenzione_only visibili solo se convenzione=True
         if norma.get("convenzione_only", False) and not convenzione:
             return
         matched[nid] = matched.get(nid, 0) + score
 
     def _lookup(tag: str, score: int) -> None:
-        """Cerca tag in TAG_INDEX e, se convenzione, anche in TAG_INDEX_CONV."""
         for nid in TAG_INDEX.get(tag, []):
             _add(nid, score)
         if convenzione:
@@ -545,20 +616,22 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
     for tag in _importo_tags(importo, convenzione):
         _lookup(tag, 3)
 
-    # 3. Token testuali
+    # 3. Tag espansi da Groq (Stadio 0) — score alto perché semanticamente validati
+    for tag in (expanded_tags or []):
+        _lookup(tag, 3)
+
+    # 4. Token testuali (matching diretto + semantico)
     full_text = f"{testo} {oggetto}".lower()
     tokens = re.split(r"[\s,./;:()\[\]\"']+", full_text)
     for token in tokens:
         token = token.strip()
         if not token or token in STOP_WORDS or len(token) < 3:
             continue
-        # match diretto sul tag
         _lookup(token, 2)
-        # match semantico
         for sem_tag in SEMANTIC_MAP.get(token, []):
             _lookup(sem_tag, 1)
 
-    # 4. Boost modalità convenzione
+    # 5. Boost modalità convenzione
     if convenzione:
         for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000", "l_296_2006_consip"):
             if boost_id in NORME_BY_ID:
@@ -597,7 +670,7 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
-# ── Groq ranking (Llama 3.3 70B — free tier) ──────────────────────────────────
+# ── Stadio 2: Groq ranking (Llama 3.3 70B — free tier) ───────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list, convenzione: bool = False) -> list:
     api_key = os.environ.get("GROQ_API_KEY", "")
@@ -681,7 +754,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 norma["ai_motivation"] = ranked_map.get(nid, "")
                 reranked.append(norma)
 
-        # Norme candidate non restituite da Groq → coda senza motivazione AI
         seen = {n["id"] for n in reranked}
         for n in groq_candidates:
             if n["id"] not in seen:
@@ -716,9 +788,15 @@ class handler(BaseHTTPRequestHandler):
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione)
+        # Stadio 0: espansione semantica della query tramite Groq
+        expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
+
+        # Stadio 1: tag matching (arricchito dai tag espansi)
+        candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
         print(f"[TAG ENGINE] {len(candidates)} candidati trovati: {[n['id'] for n in candidates]}", flush=True)
-        results    = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
+
+        # Stadio 2: Groq ranking + motivazione
+        results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
         importo_label = _importo_label(importo, convenzione)
 
