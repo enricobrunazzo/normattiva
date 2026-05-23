@@ -33,6 +33,10 @@ GROQ_MAX_CANDIDATES = 12
 # ── Score minimo per entrare nel pool Groq ────────────────────────────────────
 MIN_SCORE_FOR_GROQ = 2
 
+# ── Modelli Groq ──────────────────────────────────────────────────────────────
+MODEL_EXPAND = "openai/gpt-oss-20b"    # Stadio 0 — query expansion (veloce)
+MODEL_RANK   = "openai/gpt-oss-120b"   # Stadio 2 — ranking + motivazione (potente)
+
 # ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
@@ -511,9 +515,8 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
 def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
     """Chiede a Groq di tradurre la query in tag canonici del sistema.
 
-    Restituisce una lista di tag (stringhe) presenti in _ALL_VALID_TAGS.
-    In caso di errore o chiave assente, restituisce lista vuota (fallback
-    al solo matching testuale dello Stadio 1).
+    Usa MODEL_EXPAND (gpt-oss-20b) — veloce, sufficiente per tag extraction.
+    Restituisce lista vuota in caso di errore (fallback al solo matching testuale).
     """
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -541,7 +544,7 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
 
     try:
         payload = json.dumps({
-            "model": "llama-3.3-70b-versatile",
+            "model": MODEL_EXPAND,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.0,
             "max_tokens": 256,
@@ -566,9 +569,8 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         data = _extract_json(raw_content)
         expanded_tags = data.get("tags", [])
 
-        # Filtra: accetta solo tag presenti nel sistema
         valid = [t for t in expanded_tags if t in set(_ALL_VALID_TAGS)]
-        print(f"[EXPAND] OK | elapsed={elapsed:.2f}s | tags={valid}", flush=True)
+        print(f"[EXPAND] OK | model={MODEL_EXPAND} | elapsed={elapsed:.2f}s | tags={valid}", flush=True)
         return valid
 
     except Exception as exc:
@@ -670,9 +672,10 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
-# ── Stadio 2: Groq ranking (Llama 3.3 70B — free tier) ───────────────────────
+# ── Stadio 2: Groq ranking ─────────────────────────────────────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list, convenzione: bool = False) -> list:
+    """Usa MODEL_RANK (gpt-oss-120b) — più potente, per ranking + motivazione."""
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         print("[GROQ] SKIP — GROQ_API_KEY assente a runtime", flush=True)
@@ -682,7 +685,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
     remaining = candidates[GROQ_MAX_CANDIDATES:]
 
     key_preview = f"{api_key[:8]}...{api_key[-4:]}"
-    print(f"[GROQ] Calling Groq API | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)}) | convenzione={convenzione}", flush=True)
+    print(f"[GROQ] Calling Groq API | model={MODEL_RANK} | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)}) | convenzione={convenzione}", flush=True)
     t0 = time.time()
 
     try:
@@ -718,7 +721,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
         )
 
         payload = json.dumps({
-            "model": "llama-3.3-70b-versatile",
+            "model": MODEL_RANK,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
             "max_tokens": 1024,
@@ -738,7 +741,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             body = json.loads(resp.read().decode())
 
         elapsed = time.time() - t0
-        print(f"[GROQ] OK | elapsed={elapsed:.2f}s", flush=True)
+        print(f"[GROQ] OK | model={MODEL_RANK} | elapsed={elapsed:.2f}s", flush=True)
 
         raw_content = body["choices"][0]["message"]["content"]
         ranked_data = _extract_json(raw_content)
@@ -788,14 +791,14 @@ class handler(BaseHTTPRequestHandler):
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        # Stadio 0: espansione semantica della query tramite Groq
+        # Stadio 0: espansione semantica della query tramite Groq (gpt-oss-20b)
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
 
         # Stadio 1: tag matching (arricchito dai tag espansi)
         candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
         print(f"[TAG ENGINE] {len(candidates)} candidati trovati: {[n['id'] for n in candidates]}", flush=True)
 
-        # Stadio 2: Groq ranking + motivazione
+        # Stadio 2: Groq ranking + motivazione (gpt-oss-120b)
         results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
         importo_label = _importo_label(importo, convenzione)
