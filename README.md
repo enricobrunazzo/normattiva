@@ -32,10 +32,10 @@ Input utente (testo, tipo atto, importo, oggetto)
    • Analisi tipo atto  → TIPO_ATTO_TAGS
    • Analisi importo    → soglie D.Lgs. 36/2023
    • Analisi semantica  → SEMANTIC_MAP + TAG_INDEX
-   • Output: lista candidati ordinati per score
+   • Output: lista candidati ordinati per score (min. score: 2)
         ↓
  [Stadio 2] Groq AI ranking (Llama 3.3 70B)
-   • Riceve fino a 15 norme candidate
+   • Riceve fino a 12 norme candidate (GROQ_MAX_CANDIDATES = 12)
    • Le riordina per rilevanza rispetto al caso specifico
    • Aggiunge motivazione contestuale (1-2 frasi) per ciascuna
    • Fallback silenzioso: se GROQ_API_KEY assente, usa solo lo stadio 1
@@ -60,7 +60,7 @@ Attivando il flag **Convenzione Consip / MEPA**, il motore modifica il ranking p
 
 ## Database normativo
 
-11 norme attualmente indicizzate:
+17 norme attualmente indicizzate:
 
 | ID | Norma | Tag principali |
 |---|---|---|
@@ -75,6 +75,12 @@ Attivando il flag **Convenzione Consip / MEPA**, il motore modifica il ranking p
 | `dlgs_118_2011` | Armonizzazione contabile enti locali | bilancio, competenza finanziaria |
 | `pnrr_missione1` | PNRR — Missione 1 Digitalizzazione | cloud, AgID, transizione digitale |
 | `l_136_2010` | Tracciabilità flussi finanziari | CIG, CUP, tracciabilità |
+| `l_241_1990` | Legge sul procedimento amministrativo | motivazione, accesso atti, provvedimento |
+| `dlgs_50_2016` | Codice contratti pubblici 2016 (previgente) | proroga, appalto storico, collaudo |
+| `l_296_2006_consip` | Obbligo Consip / MEPA (L. Finanziaria 2007) | MEPA, Consip, benchmark, convenzione |
+| `dlgs_231_2001` | Responsabilità amministrativa degli enti | MOG, corruzione, fornitore |
+| `circ_agid_cloud_2021` | Qualificazione cloud PA — AgID / ACN | cloud qualificato, SaaS, marketplace PA |
+| `l_328_2000` + `dpcm_159_2013` + `l_104_1992` | Servizi sociali, ISEE, disabilità | servizi sociali, ISEE, RSA, retta, disabili |
 
 ---
 
@@ -120,7 +126,7 @@ GROQ_API_KEY=gsk_...
 
 > ⚠️ **Importante:** dopo aver aggiunto o modificato la variabile, effettua sempre
 > un nuovo deploy con `vercel --prod` (o un Redeploy dalla dashboard **senza**
-> spuntare “Use existing Build Cache”). Il semplice Redeploy da cache non aggiorna
+> spuntare "Use existing Build Cache"). Il semplice Redeploy da cache non aggiorna
 > le variabili d'ambiente nelle serverless functions.
 
 **Groq free tier:** 14.400 token/minuto, nessuna carta di credito richiesta.
@@ -164,12 +170,12 @@ Le env vars nelle **serverless functions Python** di Vercel sono disponibili a r
 - [x] Soglie automatiche D.Lgs. 36/2023
 - [x] Modalità Convenzione Consip / MEPA con boost norme dedicate
 - [x] Log diagnostici runtime (`[INIT]`, `[GROQ]`, `[REQUEST]`)
-- [x] Copertura AI su tutte le norme del DB (GROQ_MAX_CANDIDATES = 15)
+- [x] Copertura AI su tutte le norme del DB (GROQ_MAX_CANDIDATES = 12)
+- [x] Espansione database: L. 241/1990, D.Lgs. 50/2016, L. 296/2006, D.Lgs. 231/2001, AgID cloud, servizi sociali (L. 328/2000, DPCM 159/2013, L. 104/1992)
 - [ ] Scheda dettaglio norma con testo degli articoli chiave
 - [ ] Integrazione dati.normattiva.it open data API
 - [ ] Storico ricerche (localStorage)
 - [ ] Export PDF/Word delle norme trovate
-- [ ] Espansione database normativo (D.Lgs. 50/2016 pre-vigente, L. 241/1990, ecc.)
 
 ---
 
