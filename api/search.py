@@ -28,7 +28,8 @@ DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
 # ── Numero massimo di candidati passati a Groq ────────────────────────────────
-GROQ_MAX_CANDIDATES = 8
+# Aumentato a 12 per coprire settori specializzati (sociali, sanitari, ecc.)
+GROQ_MAX_CANDIDATES = 12
 
 # ── Score minimo per entrare nel pool Groq ────────────────────────────────────
 # Abbassato da 4 a 2: evita di tagliare norme pertinenti con match parziale
@@ -221,6 +222,89 @@ NORMATIVE_DB = [
         "url_normattiva": "https://www.agid.gov.it/it/infrastrutture/cloud-pa",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=AgID+qualificazione+cloud+PA+628+2021",
     },
+    # ── SETTORE SERVIZI SOCIALI ────────────────────────────────────────────────
+    {
+        "id": "l_328_2000",
+        "titolo": "Legge quadro per la realizzazione del sistema integrato di interventi e servizi sociali",
+        "estremi": "L. 8 novembre 2000, n. 328",
+        "descrizione": (
+            "Legge quadro che disciplina il sistema integrato di interventi e servizi sociali. "
+            "L'art. 6 attribuisce ai Comuni le funzioni di programmazione, progettazione e gestione "
+            "del sistema locale dei servizi sociali a rete, inclusa l'erogazione dei servizi e delle "
+            "prestazioni economiche. L'art. 25 stabilisce l'utilizzo dell'ISEE come strumento di "
+            "determinazione e differenziazione dei criteri di accesso alle prestazioni sociali e "
+            "socio-sanitarie. È il riferimento normativo primario per ogni atto che dispone "
+            "l'erogazione di contributi, rette o prestazioni sociali a favore di persone in "
+            "condizioni di bisogno (anziani, disabili, minori, famiglie)."
+        ),
+        "articoli_chiave": [
+            "art. 6 — funzioni dei Comuni (programmazione e gestione servizi sociali)",
+            "art. 22 — definizione del sistema integrato di interventi e servizi sociali",
+            "art. 25 — ISEE come strumento di accesso alle prestazioni sociali",
+        ],
+        "tags": [
+            "servizi-sociali", "sociale", "isee", "retta", "anziani", "disabili", "minori",
+            "assistenza", "contributo", "prestazione", "compartecipazione", "comune",
+            "welfare", "bisogno", "nucleo-familiare", "assistente-sociale",
+        ],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2000-11-08;328",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+328+2000+servizi+sociali",
+    },
+    {
+        "id": "dpcm_159_2013",
+        "titolo": "Regolamento ISEE — Indicatore della Situazione Economica Equivalente",
+        "estremi": "D.P.C.M. 5 dicembre 2013, n. 159",
+        "descrizione": (
+            "Regolamento che disciplina la determinazione dell'Indicatore della Situazione Economica "
+            "Equivalente (ISEE). L'art. 6 disciplina specificamente le prestazioni agevolate di natura "
+            "socio-sanitaria residenziale (RSA, case di riposo, strutture per disabili), prevedendo "
+            "l'utilizzo dell'ISEE socio-sanitario, che considera anche il reddito e il patrimonio "
+            "del coniuge e dei figli non conviventi. Qualsiasi atto che dispone la compartecipazione "
+            "alla retta di ricovero in struttura residenziale DEVE citare questo regolamento e "
+            "attestare l'acquisizione dell'ISEE socio-sanitario: l'omissione determina nullità "
+            "dell'atto per difetto di motivazione."
+        ),
+        "articoli_chiave": [
+            "art. 2 — definizione e calcolo dell'ISEE ordinario",
+            "art. 6 — ISEE socio-sanitario per prestazioni residenziali e semi-residenziali",
+            "art. 7 — ISEE per prestazioni agevolate rivolte a minorenni",
+            "art. 4 — composizione del nucleo familiare ai fini ISEE",
+        ],
+        "tags": [
+            "isee", "isee-sociosanitario", "retta", "rsa", "ricovero", "residenziale",
+            "anziani", "disabili", "compartecipazione", "servizi-sociali", "sociale",
+            "nucleo-familiare", "assistenza", "prestazione", "socio-sanitario",
+            "struttura-residenziale", "casa-riposo",
+        ],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.del.presidente.del.consiglio.dei.ministri:2013-12-05;159",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=DPCM+159+2013+ISEE+regolamento",
+    },
+    {
+        "id": "l_104_1992",
+        "titolo": "Legge-quadro per l'assistenza, l'integrazione sociale e i diritti delle persone handicappate",
+        "estremi": "L. 5 febbraio 1992, n. 104",
+        "descrizione": (
+            "Legge quadro sull'assistenza e l'integrazione sociale delle persone con disabilità. "
+            "Attribuisce ai Comuni l'obbligo di garantire i servizi di assistenza, riabilitazione "
+            "e integrazione. Rilevante per atti che dispongono prestazioni, contributi o rette a "
+            "favore di persone con handicap grave (art. 3 co. 3), permessi lavorativi (art. 33) "
+            "e inserimento lavorativo (art. 35). Spesso citata in sinergia con la L. 328/2000 "
+            "negli atti del servizio sociale comunale."
+        ),
+        "articoli_chiave": [
+            "art. 3 — definizione di persona handicappata e handicap grave",
+            "art. 8 — interventi a favore delle persone handicappate (Comuni)",
+            "art. 10 — inserimento e integrazione scolastica",
+            "art. 33 — agevolazioni lavorative (permessi)",
+        ],
+        "tags": [
+            "disabili", "handicap", "disabilita", "assistenza", "integrazione",
+            "servizi-sociali", "sociale", "comune", "retta", "contributo",
+            "permessi", "welfare", "prestazione",
+        ],
+        "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1992-02-05;104",
+        "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+104+1992+assistenza+disabili",
+    },
 ]
 
 # ── Costruzione TAG_INDEX ──────────────────────────────────────────────────────
@@ -338,6 +422,31 @@ SEMANTIC_MAP = {
     "storico":        ["storico", "previgente", "proroga"],
     "collaudo":       ["collaudo", "appalto", "contratto"],
     "modifica":       ["modifica", "proroga", "contratto"],
+    # servizi sociali
+    "sociale":        ["servizi-sociali", "sociale", "assistenza", "isee", "welfare"],
+    "sociali":        ["servizi-sociali", "sociale", "assistenza", "isee", "welfare"],
+    "isee":           ["isee", "isee-sociosanitario", "servizi-sociali", "retta", "compartecipazione"],
+    "sociosanitario": ["isee-sociosanitario", "retta", "rsa", "ricovero", "socio-sanitario"],
+    "socio-sanitario":["isee-sociosanitario", "retta", "rsa", "ricovero", "socio-sanitario"],
+    "retta":          ["retta", "isee", "isee-sociosanitario", "rsa", "ricovero", "compartecipazione", "servizi-sociali"],
+    "rsa":            ["rsa", "retta", "isee-sociosanitario", "ricovero", "anziani", "struttura-residenziale"],
+    "ricovero":       ["ricovero", "rsa", "retta", "isee-sociosanitario", "residenziale", "struttura-residenziale"],
+    "residenziale":   ["residenziale", "rsa", "retta", "isee-sociosanitario", "struttura-residenziale"],
+    "anziani":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali", "casa-riposo"],
+    "anziano":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali"],
+    "anziana":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali"],
+    "disabili":       ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali", "retta"],
+    "disabile":       ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali"],
+    "disabilita":     ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali"],
+    "handicap":       ["handicap", "disabili", "disabilita", "assistenza", "permessi"],
+    "minori":         ["minori", "servizi-sociali", "assistenza", "isee", "welfare"],
+    "assistenza":     ["assistenza", "servizi-sociali", "sociale", "isee", "welfare"],
+    "compartecipazione": ["compartecipazione", "retta", "isee", "isee-sociosanitario", "servizi-sociali"],
+    "integrazione":   ["integrazione", "disabili", "servizi-sociali", "assistenza"],
+    "welfare":        ["welfare", "servizi-sociali", "sociale", "isee", "assistenza"],
+    "nucleo":         ["nucleo-familiare", "isee", "isee-sociosanitario", "servizi-sociali"],
+    "familiare":      ["nucleo-familiare", "isee", "servizi-sociali"],
+    "assistente":     ["assistente-sociale", "servizi-sociali", "sociale"],
 }
 
 STOP_WORDS = {
