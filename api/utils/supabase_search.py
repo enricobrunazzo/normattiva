@@ -14,27 +14,38 @@ import os
 import urllib.request
 from typing import Optional
 
-_SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-_SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+# NOTA: NON leggere le env var a module load time su Vercel serverless.
+# Le variabili d'ambiente sono disponibili solo a runtime (invocazione).
+# Usare sempre os.environ.get() direttamente nelle funzioni.
+
+
+def _supabase_url() -> str:
+    return os.environ.get("SUPABASE_URL", "")
+
+
+def _supabase_key() -> str:
+    return os.environ.get("SUPABASE_KEY", "")
 
 
 def is_supabase_configured() -> bool:
-    return bool(_SUPABASE_URL and _SUPABASE_KEY)
+    return bool(_supabase_url() and _supabase_key())
 
 
 def get_embedding(text: str) -> Optional[list[float]]:
     """
     Genera embedding via Edge Function embed (gte-small, 384 dim).
     """
-    if not is_supabase_configured():
+    url = _supabase_url()
+    key = _supabase_key()
+    if not url or not key:
         return None
     try:
         payload = json.dumps({"input": text[:2048]}).encode()
         req = urllib.request.Request(
-            f"{_SUPABASE_URL}/functions/v1/embed",
+            f"{url}/functions/v1/embed",
             data=payload,
             headers={
-                "Authorization": f"Bearer {_SUPABASE_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             method="POST",
@@ -57,7 +68,10 @@ def supabase_vector_search(
     Esegue ricerca vettoriale su Supabase tramite la funzione RPC search_norme_by_embedding.
     Ritorna lista di norme ordinate per similarità, o None se fallisce.
     """
-    if not is_supabase_configured():
+    url = _supabase_url()
+    key = _supabase_key()
+    if not url or not key:
+        print("[SUPA] Supabase non configurato, skip vector search", flush=True)
         return None
 
     embedding = get_embedding(query_text)
@@ -75,11 +89,11 @@ def supabase_vector_search(
         }).encode()
 
         req = urllib.request.Request(
-            f"{_SUPABASE_URL}/rest/v1/rpc/search_norme_by_embedding",
+            f"{url}/rest/v1/rpc/search_norme_by_embedding",
             data=payload,
             headers={
-                "apikey":        _SUPABASE_KEY,
-                "Authorization": f"Bearer {_SUPABASE_KEY}",
+                "apikey":        key,
+                "Authorization": f"Bearer {key}",
                 "Content-Type":  "application/json",
                 "Prefer":        "return=representation",
             },
@@ -97,6 +111,7 @@ def supabase_vector_search(
             results = [r for r in results if not r.get("convenzione_only", False)]
 
         if not results:
+            print("[SUPA] vector search: 0 risultati sopra soglia", flush=True)
             return None
 
         normalized = []
@@ -133,7 +148,9 @@ def insert_norma_to_supabase(norma: dict, embedding: list[float]) -> bool:
     """
     Inserisce o aggiorna una norma nel DB Supabase con il suo embedding.
     """
-    if not is_supabase_configured():
+    url = _supabase_url()
+    key = _supabase_key()
+    if not url or not key:
         return False
     try:
         vector_str = "[" + ",".join(str(x) for x in embedding) + "]"
@@ -151,11 +168,11 @@ def insert_norma_to_supabase(norma: dict, embedding: list[float]) -> bool:
             "embedding":        vector_str,
         }]).encode()
         req = urllib.request.Request(
-            f"{_SUPABASE_URL}/rest/v1/norme",
+            f"{url}/rest/v1/norme",
             data=payload,
             headers={
-                "apikey":        _SUPABASE_KEY,
-                "Authorization": f"Bearer {_SUPABASE_KEY}",
+                "apikey":        key,
+                "Authorization": f"Bearer {key}",
                 "Content-Type":  "application/json",
                 "Prefer":        "resolution=merge-duplicates,return=minimal",
             },
@@ -180,7 +197,9 @@ def log_query_to_supabase(
     groq_used: bool,
 ) -> None:
     """Logga la query su Supabase in modo best-effort."""
-    if not is_supabase_configured():
+    url = _supabase_url()
+    key = _supabase_key()
+    if not url or not key:
         return
     try:
         payload = json.dumps([{
@@ -194,11 +213,11 @@ def log_query_to_supabase(
             "groq_used":     groq_used,
         }]).encode()
         req = urllib.request.Request(
-            f"{_SUPABASE_URL}/rest/v1/query_log",
+            f"{url}/rest/v1/query_log",
             data=payload,
             headers={
-                "apikey":        _SUPABASE_KEY,
-                "Authorization": f"Bearer {_SUPABASE_KEY}",
+                "apikey":        key,
+                "Authorization": f"Bearer {key}",
                 "Content-Type":  "application/json",
                 "Prefer":        "return=minimal",
             },
