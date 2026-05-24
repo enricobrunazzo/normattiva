@@ -1,11 +1,11 @@
 """
 Modulo di ricerca su Supabase con fallback al motore tag locale.
 
-Embedding: Supabase AI built-in (gte-small, 384 dimensioni) — gratuito, zero dipendenze extra.
+Embedding: Edge Function embed (gte-small, 384 dimensioni).
 Groq viene usato SOLO per LLM (query expansion + ranking), non per embedding.
 
 Flusso:
-- Se Supabase è configurato → genera embedding via Supabase AI → ricerca vettoriale
+- Se Supabase è configurato → genera embedding via Edge Function → ricerca vettoriale
 - Altrimenti → fallback alla logica tag esistente (zero downtime)
 """
 
@@ -24,8 +24,7 @@ def is_supabase_configured() -> bool:
 
 def get_embedding(text: str) -> Optional[list[float]]:
     """
-    Genera embedding via Supabase AI built-in (gte-small, 384 dim).
-    Non richiede API key esterna — usa la service role key di Supabase.
+    Genera embedding via Edge Function embed (gte-small, 384 dim).
     """
     if not is_supabase_configured():
         return None
@@ -42,7 +41,6 @@ def get_embedding(text: str) -> Optional[list[float]]:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             body = json.loads(resp.read().decode())
-        # Supabase AI restituisce { "embedding": [...] }
         return body.get("embedding") or body.get("data", [{}])[0].get("embedding")
     except Exception as exc:
         print(f"[EMBED ERROR] {type(exc).__name__}: {exc}", flush=True)
@@ -66,9 +64,12 @@ def supabase_vector_search(
     if embedding is None:
         return None
 
+    # PostgREST + pgvector richiedono la stringa "[v1,v2,...]" non un array JSON
+    vector_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
     try:
         payload = json.dumps({
-            "query_embedding": embedding,
+            "query_embedding": vector_str,
             "match_threshold":  match_threshold,
             "match_count":      match_count,
         }).encode()
@@ -92,14 +93,12 @@ def supabase_vector_search(
             print(f"[SUPA ERROR] risposta inattesa: {str(results)[:200]}", flush=True)
             return None
 
-        # Filtra norme convenzione_only se non richiesta
         if not convenzione:
             results = [r for r in results if not r.get("convenzione_only", False)]
 
         if not results:
             return None
 
-        # Normalizza al formato usato dal resto di search.py
         normalized = []
         for r in results:
             normalized.append({
@@ -133,12 +132,11 @@ def supabase_vector_search(
 def insert_norma_to_supabase(norma: dict, embedding: list[float]) -> bool:
     """
     Inserisce o aggiorna una norma nel DB Supabase con il suo embedding.
-    Usato dal meccanismo di auto-discovery per norme non ancora presenti.
-    Ritorna True se l'operazione ha avuto successo.
     """
     if not is_supabase_configured():
         return False
     try:
+        vector_str = "[" + ",".join(str(x) for x in embedding) + "]"
         payload = json.dumps([{
             "norma_id":         norma["id"],
             "titolo":           norma.get("titolo", ""),
@@ -150,7 +148,7 @@ def insert_norma_to_supabase(norma: dict, embedding: list[float]) -> bool:
             "url_ricerca":      norma.get("url_ricerca", ""),
             "convenzione_only": norma.get("convenzione_only", False),
             "testo_vigente":    norma.get("text_vigente", ""),
-            "embedding":        embedding,
+            "embedding":        vector_str,
         }]).encode()
         req = urllib.request.Request(
             f"{_SUPABASE_URL}/rest/v1/norme",
