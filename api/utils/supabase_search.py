@@ -86,7 +86,7 @@ def get_embedding(text: str) -> Optional[list[float]]:
 
 def supabase_vector_search(
     query_text: str,
-    match_threshold: float = 0.55,
+    match_threshold: float = 0.30,   # gte-small: cosine sim reale è 0.30-0.55, non 0.85+
     match_count: int = 12,
     convenzione: bool = False,
 ) -> Optional[list[dict]]:
