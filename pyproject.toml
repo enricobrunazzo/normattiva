@@ -1,0 +1,7 @@
+[tool.vercel]
+entrypoint = "api.search:handler"
+
+# Nota: Vercel CLI 54+ richiede pyproject.toml per progetti Python
+# con più di un entrypoint nella cartella api/.
+# I singoli file api/*.py vengono comunque registrati come serverless functions
+# tramite le routes in vercel.json.

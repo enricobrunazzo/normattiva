@@ -1,17 +1,24 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/api/search", "destination": "/api/search.py" },
-    { "source": "/api/norma",  "destination": "/api/norma.py" }
-  ],
-  "headers": [
+  "builds": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin",  "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
-      ]
+      "src": "api/search.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb" }
+    },
+    {
+      "src": "api/norma.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb" }
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
+  ],
+  "routes": [
+    { "src": "/api/search", "dest": "/api/search.py" },
+    { "src": "/api/norma",  "dest": "/api/norma.py" },
+    { "src": "/(.*)",       "dest": "/public/$1" }
   ]
 }
