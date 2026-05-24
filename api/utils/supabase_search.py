@@ -14,10 +14,6 @@ import os
 import urllib.request
 from typing import Optional
 
-# NOTA: NON leggere le env var a module load time su Vercel serverless.
-# Le variabili d'ambiente sono disponibili solo a runtime (invocazione).
-# Usare sempre os.environ.get() direttamente nelle funzioni.
-
 
 def _supabase_url() -> str:
     return os.environ.get("SUPABASE_URL", "")
@@ -86,7 +82,7 @@ def get_embedding(text: str) -> Optional[list[float]]:
 
 def supabase_vector_search(
     query_text: str,
-    match_threshold: float = 0.30,   # gte-small: cosine sim reale è 0.30-0.55, non 0.85+
+    match_threshold: float = 0.30,
     match_count: int = 12,
     convenzione: bool = False,
 ) -> Optional[list[dict]]:
@@ -107,7 +103,6 @@ def supabase_vector_search(
         print("[SUPA] Vector search abortita: embedding=None", flush=True)
         return None
 
-    # PostgREST + pgvector richiedono la stringa "[v1,v2,...]" non un array JSON
     vector_str = "[" + ",".join(str(x) for x in embedding) + "]"
     rpc_url = f"{url}/rest/v1/rpc/search_norme_by_embedding"
     print(f"[SUPA] Chiamata RPC: {rpc_url[:60]} | threshold={match_threshold} | count={match_count}", flush=True)
@@ -134,18 +129,36 @@ def supabase_vector_search(
         with urllib.request.urlopen(req, timeout=10) as resp:
             status = resp.status
             raw = resp.read().decode()
-        print(f"[SUPA] RPC response: status={status} | len={len(raw)}", flush=True)
+        print(f"[SUPA] RPC response: status={status} | count={len(json.loads(raw)) if raw.startswith('[') else 'n/a'}", flush=True)
         results = json.loads(raw)
 
         if not isinstance(results, list):
             print(f"[SUPA ERROR] risposta inattesa (non lista): {str(results)[:200]}", flush=True)
             return None
 
+        # LOG DETTAGLIATO: tutti i risultati raw dall'RPC prima di qualsiasi filtro
+        for i, r in enumerate(results):
+            print(
+                f"[SUPA RAW #{i}] norma_id={r.get('norma_id','?')!r} "
+                f"| sim={r.get('similarity', 0):.4f} "
+                f"| conv_only={r.get('convenzione_only', False)}",
+                flush=True,
+            )
+
+        before_filter = len(results)
         if not convenzione:
             results = [r for r in results if not r.get("convenzione_only", False)]
+        after_filter = len(results)
+
+        print(
+            f"[SUPA FILTER] convenzione={convenzione} | "
+            f"prima={before_filter} | dopo={after_filter} | "
+            f"scartati={before_filter - after_filter}",
+            flush=True,
+        )
 
         if not results:
-            print("[SUPA] Vector search: 0 risultati sopra soglia", flush=True)
+            print("[SUPA] Vector search: 0 risultati dopo filtro convenzione_only", flush=True)
             return None
 
         normalized = []
@@ -168,7 +181,9 @@ def supabase_vector_search(
 
         print(
             f"[SUPA] vector search OK | q={query_text[:60]!r} | "
-            f"results={len(normalized)} | top_sim={normalized[0]['similarity']:.3f if normalized else 0}",
+            f"results={len(normalized)} | "
+            f"ids={[n['id'] for n in normalized]} | "
+            f"top_sim={normalized[0]['similarity']:.4f}",
             flush=True,
         )
         return normalized
