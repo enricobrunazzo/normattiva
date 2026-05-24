@@ -1,3 +1,5 @@
-# Nessuna dipendenza esterna richiesta.
-# Il backend usa solo la stdlib Python (urllib, json, os).
-# Groq API viene chiamata direttamente via urllib.request.
+# Dipendenze Python per backend Normattiva
+# Il backend runtime usa stdlib + chiamate HTTP dirette.
+# Supabase client serve per script di ingestione locale.
+
+supabase>=2.5.0
