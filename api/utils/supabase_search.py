@@ -28,7 +28,17 @@ def _supabase_key() -> str:
 
 
 def is_supabase_configured() -> bool:
-    return bool(_supabase_url() and _supabase_key())
+    url = _supabase_url()
+    key = _supabase_key()
+    configured = bool(url and key)
+    if not configured:
+        print(
+            f"[SUPA DIAG] is_supabase_configured=False | "
+            f"SUPABASE_URL={'SET' if url else 'MISSING'} | "
+            f"SUPABASE_KEY={'SET' if key else 'MISSING'}",
+            flush=True,
+        )
+    return configured
 
 
 def get_embedding(text: str) -> Optional[list[float]]:
@@ -38,11 +48,16 @@ def get_embedding(text: str) -> Optional[list[float]]:
     url = _supabase_url()
     key = _supabase_key()
     if not url or not key:
+        print("[EMBED] Skip: Supabase non configurato", flush=True)
         return None
+
+    edge_url = f"{url}/functions/v1/embed"
+    print(f"[EMBED] Calling Edge Function: {edge_url[:60]}", flush=True)
+
     try:
         payload = json.dumps({"input": text[:2048]}).encode()
         req = urllib.request.Request(
-            f"{url}/functions/v1/embed",
+            edge_url,
             data=payload,
             headers={
                 "Authorization": f"Bearer {key}",
@@ -51,10 +66,21 @@ def get_embedding(text: str) -> Optional[list[float]]:
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
+            status = resp.status
             body = json.loads(resp.read().decode())
-        return body.get("embedding") or body.get("data", [{}])[0].get("embedding")
+        print(f"[EMBED] Edge Function response: status={status} | keys={list(body.keys())}", flush=True)
+        emb = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
+        if emb is None:
+            print(f"[EMBED] WARNING: embedding key non trovata nel body: {str(body)[:200]}", flush=True)
+        else:
+            print(f"[EMBED] OK: dimensioni={len(emb)}", flush=True)
+        return emb
     except Exception as exc:
-        print(f"[EMBED ERROR] {type(exc).__name__}: {exc}", flush=True)
+        print(
+            f"[EMBED ERROR] {type(exc).__name__}: {exc} | "
+            f"Edge URL: {edge_url[:60]}",
+            flush=True,
+        )
         return None
 
 
@@ -74,12 +100,17 @@ def supabase_vector_search(
         print("[SUPA] Supabase non configurato, skip vector search", flush=True)
         return None
 
+    print(f"[SUPA] Avvio vector search | q={query_text[:50]!r}", flush=True)
+
     embedding = get_embedding(query_text)
     if embedding is None:
+        print("[SUPA] Vector search abortita: embedding=None", flush=True)
         return None
 
     # PostgREST + pgvector richiedono la stringa "[v1,v2,...]" non un array JSON
     vector_str = "[" + ",".join(str(x) for x in embedding) + "]"
+    rpc_url = f"{url}/rest/v1/rpc/search_norme_by_embedding"
+    print(f"[SUPA] Chiamata RPC: {rpc_url[:60]} | threshold={match_threshold} | count={match_count}", flush=True)
 
     try:
         payload = json.dumps({
@@ -89,7 +120,7 @@ def supabase_vector_search(
         }).encode()
 
         req = urllib.request.Request(
-            f"{url}/rest/v1/rpc/search_norme_by_embedding",
+            rpc_url,
             data=payload,
             headers={
                 "apikey":        key,
@@ -101,17 +132,20 @@ def supabase_vector_search(
         )
 
         with urllib.request.urlopen(req, timeout=10) as resp:
-            results = json.loads(resp.read().decode())
+            status = resp.status
+            raw = resp.read().decode()
+        print(f"[SUPA] RPC response: status={status} | len={len(raw)}", flush=True)
+        results = json.loads(raw)
 
         if not isinstance(results, list):
-            print(f"[SUPA ERROR] risposta inattesa: {str(results)[:200]}", flush=True)
+            print(f"[SUPA ERROR] risposta inattesa (non lista): {str(results)[:200]}", flush=True)
             return None
 
         if not convenzione:
             results = [r for r in results if not r.get("convenzione_only", False)]
 
         if not results:
-            print("[SUPA] vector search: 0 risultati sopra soglia", flush=True)
+            print("[SUPA] Vector search: 0 risultati sopra soglia", flush=True)
             return None
 
         normalized = []
@@ -140,7 +174,10 @@ def supabase_vector_search(
         return normalized
 
     except Exception as exc:
-        print(f"[SUPA ERROR] {type(exc).__name__}: {exc}", flush=True)
+        print(
+            f"[SUPA ERROR] RPC fallita: {type(exc).__name__}: {exc} | URL: {rpc_url[:60]}",
+            flush=True,
+        )
         return None
 
 
