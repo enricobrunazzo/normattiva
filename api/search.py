@@ -1,4 +1,5 @@
 """Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama."""
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
 import json
@@ -10,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# ── Defensive startup log (eseguito al cold start, visibile nei Runtime Logs) ──
+# ── Defensive startup log ────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
 print(
     f"[INIT] GROQ_API_KEY present: {_GROQ_API_KEY_PRESENT} "
@@ -40,12 +41,16 @@ MODEL_EXPAND = "openai/gpt-oss-20b"    # Stadio 0 — query expansion (veloce)
 MODEL_RANK   = "openai/gpt-oss-120b"   # Stadio 2 — ranking + motivazione (potente)
 
 # ── Cache in memoria per il testo vigente da Normattiva ───────────────────────
-# { url_normattiva: { "text": str, "fetched_at": float } }
 _NORM_TEXT_CACHE: dict = {}
 _CACHE_TTL = 60 * 60 * 6   # 6 ore
 
-# ── Quante norme top-N arricchire con il fetch live ───────────────────────────
-K_FETCH_LIVE = 5
+# ── Fetch live: numero norme top-K e parametri di timeout ─────────────────────
+# K_FETCH_LIVE: quante norme arricchire (ridotto a 3 per limitare connessioni)
+# FETCH_TIMEOUT_PER_NORMA: timeout per singolo fetch HTTP (secondi)
+# FETCH_BUDGET_TOTAL: budget totale per lo stadio 1.5 (secondi)
+K_FETCH_LIVE           = 3
+FETCH_TIMEOUT_PER_NORMA = 3
+FETCH_BUDGET_TOTAL      = 4
 
 # ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
@@ -443,7 +448,7 @@ SEMANTIC_MAP = {
     "residenziale":   ["residenziale", "rsa", "retta", "isee-sociosanitario", "struttura-residenziale"],
     "anziani":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali", "casa-riposo"],
     "anziano":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali"],
-    "anziana":        ["anziani", "rsa", "retta", "isee-sociosanitario", "servizi-sociali"],
+    "anziana":        ["anziani","rsa", "retta", "isee-sociosanitario", "servizi-sociali"],
     "disabili":       ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali", "retta"],
     "disabile":       ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali"],
     "disabilita":     ["disabili", "handicap", "disabilita", "assistenza", "servizi-sociali"],
@@ -470,7 +475,6 @@ STOP_WORDS = {
     "questo","questa","questi","queste","also","such",
 }
 
-# ── Lista di tutti i tag validi nel sistema (per lo Stadio 0) ─────────────────
 _ALL_VALID_TAGS = sorted(set(
     tag
     for norma in NORMATIVE_DB
@@ -521,14 +525,13 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
         return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
-# ── Stadio 1.5: fetch live del testo vigente da Normattiva ────────────────────
-def _fetch_norma_text(url: str, timeout: int = 7) -> str:
+# ── Stadio 1.5: fetch live del testo vigente da Normattiva (parallelo) ────────
+def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
     """Recupera il testo vigente di una norma da Normattiva via URL NIR.
 
-    - Usa una cache in memoria con TTL 6h per evitare fetch ripetuti.
-    - Il testo viene estratto via regex dall'HTML, poi pulito da tag e entità.
-    - In caso di qualsiasi errore ritorna stringa vuota (fallback silente).
-    - Il testo viene troncato a 8000 caratteri per non saturare il contesto Groq.
+    - Cache in memoria con TTL 6h.
+    - Parsing HTML tollerante; testo troncato a 8000 caratteri.
+    - Qualsiasi errore ritorna stringa vuota (fallback silente).
     """
     if not url:
         return ""
@@ -555,12 +558,9 @@ def _fetch_norma_text(url: str, timeout: int = 7) -> str:
             encoding = resp.headers.get_content_charset() or "utf-8"
             html_text = raw.decode(encoding, errors="replace")
 
-        # Rimuovi script e style
         cleaned = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html_text, flags=re.S | re.I)
-        # Rimuovi commenti HTML
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
 
-        # Tenta di isolare il blocco principale dell'atto (Normattiva usa vari id/class)
         block = None
         for pattern in [
             r'<(?:div|article|section)[^>]+(?:id|class)=["\']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\']?[^>]*>(.*?)</(?:div|article|section)>',
@@ -575,20 +575,13 @@ def _fetch_norma_text(url: str, timeout: int = 7) -> str:
             m2 = re.search(r"<body[^>]*>([\s\S]*?)</body>", cleaned, flags=re.I)
             block = m2.group(1) if m2 else cleaned
 
-        # Rimuovi tutti i tag HTML residui
         text = re.sub(r"<[^>]+>", " ", block)
-        # Unescape entità HTML (&amp; → &, ecc.)
         text = unescape(text)
-        # Normalizza spazi bianchi
         text = re.sub(r"\s+", " ", text).strip()
-        # Tronca a 8000 caratteri per non saturare il contesto Groq
         text = text[:8000]
 
         _NORM_TEXT_CACHE[url] = {"text": text, "fetched_at": now}
-        print(
-            f"[NORMATTV_FETCH] OK url={url[:80]} | len={len(text)}",
-            flush=True,
-        )
+        print(f"[NORMATTV_FETCH] OK url={url[:80]} | len={len(text)}", flush=True)
         return text
 
     except urllib.error.HTTPError as e:
@@ -603,13 +596,47 @@ def _fetch_norma_text(url: str, timeout: int = 7) -> str:
     return ""
 
 
+def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE,
+                          budget: float = FETCH_BUDGET_TOTAL) -> None:
+    """Esegue i fetch delle top-K norme in parallelo entro un budget temporale.
+
+    Modifica candidates in-place aggiungendo il campo 'text_vigente'.
+    I fetch non completati entro `budget` secondi vengono abbandonati
+    (la norma resta senza testo vigente, senza bloccare la risposta).
+    """
+    top = candidates[:k]
+    # Inizializza text_vigente su tutti i candidati (fallback vuoto)
+    for n in candidates:
+        n.setdefault("text_vigente", "")
+
+    # Mappa future -> norma per assegnare i risultati
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=k) as executor:
+        future_to_norma = {
+            executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n
+            for n in top
+        }
+        for future in as_completed(future_to_norma, timeout=budget):
+            norma = future_to_norma[future]
+            try:
+                norma["text_vigente"] = future.result()
+            except Exception as exc:
+                print(
+                    f"[NORMATTV_PARALLEL] future error nid={norma['id']}: {exc}",
+                    flush=True,
+                )
+
+    elapsed = time.time() - t0
+    hits = sum(1 for n in top if n.get("text_vigente", "").strip())
+    print(
+        f"[NORMATTV_PARALLEL] done | k={k} | hits={hits} | elapsed={elapsed:.2f}s",
+        flush=True,
+    )
+
+
 # ── Stadio 0: espansione semantica della query tramite Groq ───────────────────
 def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
-    """Chiede a Groq di tradurre la query in tag canonici del sistema.
-
-    Usa MODEL_EXPAND (gpt-oss-20b) — veloce, sufficiente per tag extraction.
-    Restituisce lista vuota in caso di errore (fallback al solo matching testuale).
-    """
+    """Usa MODEL_EXPAND per tradurre la query in tag canonici del sistema."""
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return []
@@ -660,7 +687,6 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         raw_content = body["choices"][0]["message"]["content"]
         data = _extract_json(raw_content)
         expanded_tags = data.get("tags", [])
-
         valid = [t for t in expanded_tags if t in set(_ALL_VALID_TAGS)]
         print(f"[EXPAND] OK | model={MODEL_EXPAND} | elapsed={elapsed:.2f}s | tags={valid}", flush=True)
         return valid
@@ -674,16 +700,6 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 convenzione: bool = False,
                 expanded_tags: list | None = None) -> list:
-    """Pre-filtro: restituisce norme candidate ordinate per score tag.
-
-    Logica score:
-    - tipo_atto match diretto:      +2
-    - importo soglia match:         +3
-    - token testo match diretto:    +2
-    - token testo match semantico:  +1
-    - tag da espansione Groq (Stadio 0): +3
-    - boost convenzione:            +4
-    """
     matched: dict = {}
 
     def _add(nid: str, score: int = 1) -> None:
@@ -701,20 +717,16 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
             for nid in TAG_INDEX_CONV.get(tag, []):
                 _add(nid, score)
 
-    # 1. Tipo atto
     if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
         for tag in TIPO_ATTO_TAGS[tipo_atto.lower()]:
             _lookup(tag, 2)
 
-    # 2. Importo
     for tag in _importo_tags(importo, convenzione):
         _lookup(tag, 3)
 
-    # 3. Tag espansi da Groq (Stadio 0) — score alto perché semanticamente validati
     for tag in (expanded_tags or []):
         _lookup(tag, 3)
 
-    # 4. Token testuali (matching diretto + semantico)
     full_text = f"{testo} {oggetto}".lower()
     tokens = re.split(r"[\s,./;:()\[\]\"']+", full_text)
     for token in tokens:
@@ -725,7 +737,6 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
         for sem_tag in SEMANTIC_MAP.get(token, []):
             _lookup(sem_tag, 1)
 
-    # 5. Boost modalità convenzione
     if convenzione:
         for boost_id in ("l_136_2010", "dlgs_33_2013", "dlgs_267_2000", "l_296_2006_consip"):
             if boost_id in NORME_BY_ID:
@@ -744,7 +755,6 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str,
 
 
 def _extract_json(raw: str) -> dict:
-    """Estrae il primo oggetto JSON valido da una stringa, anche con testo attorno."""
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -767,12 +777,6 @@ def _extract_json(raw: str) -> dict:
 # ── Stadio 2: Groq ranking ─────────────────────────────────────────────────────
 def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                candidates: list, convenzione: bool = False) -> list:
-    """Usa MODEL_RANK (gpt-oss-120b) — più potente, per ranking + motivazione.
-
-    Se disponibile, include il testo vigente recuperato da Normattiva (campo
-    'text_vigente') nel contesto del prompt, così il modello può motivare
-    con riferimenti precisi agli articoli in vigore.
-    """
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         print("[GROQ] SKIP — GROQ_API_KEY assente a runtime", flush=True)
@@ -782,24 +786,21 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
     remaining = candidates[GROQ_MAX_CANDIDATES:]
 
     key_preview = f"{api_key[:8]}...{api_key[-4:]}"
-    print(f"[GROQ] Calling Groq API | model={MODEL_RANK} | key={key_preview} | candidates={len(groq_candidates)} (capped from {len(candidates)}) | convenzione={convenzione}", flush=True)
+    print(f"[GROQ] Calling Groq API | model={MODEL_RANK} | key={key_preview} | candidates={len(groq_candidates)} | convenzione={convenzione}", flush=True)
     t0 = time.time()
 
     try:
-        # Costruisce la lista norme con testo vigente se disponibile
         norme_lines = []
         for n in groq_candidates:
             line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
-                # Includi un estratto del testo vigente (max 600 char per norma)
                 estratto = testo_vigente[:600].replace("\n", " ")
                 line += f"\n  [Testo vigente (estratto)]: {estratto}..."
             norme_lines.append(line)
         norme_list = "\n".join(norme_lines)
 
         importo_info = f"Importo: {importo}" if importo else "Importo: non specificato"
-
         convenzione_info = (
             "- Modalità di acquisto: CONVENZIONE CONSIP / ORDINE SU MEPA "
             "(non è richiesta gara autonoma; la procedura è già assolta dalla convenzione quadro)\n"
@@ -814,16 +815,15 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
             f"- {importo_info}\n"
             f"{convenzione_info}"
             f"- Descrizione esigenza: {testo}\n\n"
-            "Queste sono le norme candidate trovate dal sistema (alcune includono estratti del testo vigente da Normattiva):\n"
+            "Queste sono le norme candidate (alcune includono estratti del testo vigente da Normattiva):\n"
             f"{norme_list}\n\n"
-            "Analizza attentamente il caso descritto e restituisci un oggetto JSON:\n"
-            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche sul perché è rilevante per QUESTO caso, con riferimento agli articoli vigenti se disponibili>\"}]}\n"
+            "Restituisci un oggetto JSON:\n"
+            "{\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche, con riferimento agli articoli vigenti se disponibili>\"}]}\n"
             "Regole:\n"
-            "1. Includi SOLO le norme genuinamente applicabili a questo specifico caso.\n"
-            "2. ESCLUDI le norme che hanno solo una connessione generica o marginale.\n"
+            "1. Includi SOLO le norme genuinamente applicabili.\n"
+            "2. ESCLUDI norme con connessione generica o marginale.\n"
             "3. Ordina dalla più rilevante alla meno rilevante.\n"
-            "4. La motivation deve essere specifica per il caso, non generica.\n"
-            "5. Se disponibile il testo vigente, cita l'articolo specifico pertinente."
+            "4. La motivation deve essere specifica per il caso."
         )
 
         payload = json.dumps({
@@ -861,7 +861,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str,
                 norma = NORME_BY_ID[nid].copy()
                 norma["score"] = 100 - len(reranked)
                 norma["ai_motivation"] = ranked_map.get(nid, "")
-                # Conserva il testo vigente se era stato fetchato
                 matching = next((c for c in groq_candidates if c["id"] == nid), None)
                 if matching:
                     norma["text_vigente_disponibile"] = bool(matching.get("text_vigente", "").strip())
@@ -902,23 +901,17 @@ class handler(BaseHTTPRequestHandler):
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        # Stadio 0: espansione semantica della query tramite Groq (gpt-oss-20b)
+        # Stadio 0: espansione semantica
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
 
-        # Stadio 1: tag matching (arricchito dai tag espansi)
+        # Stadio 1: tag matching
         candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
-        print(f"[TAG ENGINE] {len(candidates)} candidati trovati: {[n['id'] for n in candidates]}", flush=True)
+        print(f"[TAG ENGINE] {len(candidates)} candidati: {[n['id'] for n in candidates]}", flush=True)
 
-        # Stadio 1.5: fetch live del testo vigente da Normattiva per le top-K norme
-        # Il fetch avviene in parallelo logico (sequenziale ma con timeout breve per norma)
-        # in modo da non superare il budget di tempo della serverless function.
-        print(f"[NORMATTV_FETCH] Avvio fetch live per top-{K_FETCH_LIVE} norme", flush=True)
-        for norma in candidates[:K_FETCH_LIVE]:
-            url = norma.get("url_normattiva", "")
-            norma["text_vigente"] = _fetch_norma_text(url)
+        # Stadio 1.5: fetch live parallelo (max K_FETCH_LIVE norme, budget FETCH_BUDGET_TOTAL s)
+        _fetch_norme_parallel(candidates)
 
-        # Stadio 2: Groq ranking + motivazione (gpt-oss-120b)
-        # Il testo vigente è già iniettato nei candidati, _groq_rank lo usa nel prompt.
+        # Stadio 2: Groq ranking + motivazione
         results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
         importo_label = _importo_label(importo, convenzione)
