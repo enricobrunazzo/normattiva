@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase
+from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
 from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
 # ── Defensive startup log ────────────────────────────────────────────────────────
@@ -595,6 +595,82 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
         return candidates
 
 
+def _run_diagnostics(full_query: str) -> dict:
+    """Esegue una diagnostica completa e ritorna un dict con i risultati."""
+    diag = {}
+    supa_url = os.environ.get("SUPABASE_URL", "")
+    supa_key = os.environ.get("SUPABASE_KEY", "")
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    diag["supabase_url_set"] = bool(supa_url)
+    diag["supabase_key_set"] = bool(supa_key)
+    diag["groq_key_set"] = bool(groq_key)
+    diag["supabase_url_prefix"] = supa_url[:40] if supa_url else "MISSING"
+
+    if not supa_url or not supa_key:
+        diag["embed_result"] = "SKIP (env var mancanti)"
+        return diag
+
+    # Testa Edge Function embed
+    edge_url = f"{supa_url}/functions/v1/embed"
+    try:
+        payload = json.dumps({"input": full_query[:200]}).encode()
+        req = urllib.request.Request(
+            edge_url,
+            data=payload,
+            headers={"Authorization": f"Bearer {supa_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            status = resp.status
+            body = json.loads(resp.read().decode())
+        emb = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
+        diag["embed_status"] = status
+        diag["embed_keys"] = list(body.keys())
+        diag["embed_dim"] = len(emb) if emb else 0
+        diag["embed_ok"] = emb is not None
+    except Exception as exc:
+        diag["embed_status"] = "ERROR"
+        diag["embed_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        diag["embed_ok"] = False
+
+    # Testa RPC search_norme_by_embedding (solo se embed ok)
+    if diag.get("embed_ok") and diag.get("embed_dim", 0) > 0:
+        emb_list = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
+        vector_str = "[" + ",".join(str(x) for x in emb_list) + "]"
+        rpc_url = f"{supa_url}/rest/v1/rpc/search_norme_by_embedding"
+        try:
+            rpc_payload = json.dumps({
+                "query_embedding": vector_str,
+                "match_threshold": 0.3,
+                "match_count": 3,
+            }).encode()
+            rpc_req = urllib.request.Request(
+                rpc_url,
+                data=rpc_payload,
+                headers={
+                    "apikey": supa_key,
+                    "Authorization": f"Bearer {supa_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(rpc_req, timeout=10) as resp:
+                rpc_status = resp.status
+                rpc_body = json.loads(resp.read().decode())
+            diag["rpc_status"] = rpc_status
+            diag["rpc_results_count"] = len(rpc_body) if isinstance(rpc_body, list) else "not_list"
+            diag["rpc_ok"] = isinstance(rpc_body, list)
+        except Exception as exc:
+            diag["rpc_status"] = "ERROR"
+            diag["rpc_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+            diag["rpc_ok"] = False
+    else:
+        diag["rpc_status"] = "SKIP (embed fallito)"
+
+    return diag
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -604,8 +680,16 @@ class handler(BaseHTTPRequestHandler):
         oggetto = params.get("oggetto", [""])[0].strip()
         importo = params.get("importo", [""])[0].strip()
         convenzione = params.get("convenzione", ["false"])[0].strip().lower() in ("true", "1", "yes")
+        debug_mode = params.get("debug", ["false"])[0].strip().lower() in ("true", "1", "yes")
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
+
+        # Diagnostica (solo se ?debug=true)
+        diagnostics = None
+        if debug_mode:
+            full_query_diag = f"{testo} {oggetto}".strip()
+            diagnostics = _run_diagnostics(full_query_diag)
+            print(f"[DIAG] {json.dumps(diagnostics)}", flush=True)
 
         # 1. Espansione tag via Groq
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
@@ -653,6 +737,9 @@ class handler(BaseHTTPRequestHandler):
             "results": results,
             "elapsed_ms": elapsed_ms,
         }
+
+        if diagnostics is not None:
+            output["_diagnostics"] = diagnostics
 
         log_query_to_supabase(
             query_text=testo,
