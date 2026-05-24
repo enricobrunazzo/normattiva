@@ -610,7 +610,8 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
-        testo = params.get("q", [""])[0].strip()
+        # FIX: leggi "testo" (parametro del frontend) con fallback a "q"
+        testo = params.get("testo", [""])[0].strip() or params.get("q", [""])[0].strip()
         tipo_atto = params.get("tipo_atto", [""])[0].strip().lower()
         oggetto = params.get("oggetto", [""])[0].strip()
         importo = params.get("importo", [""])[0].strip()
@@ -639,6 +640,8 @@ class handler(BaseHTTPRequestHandler):
             "importo_label": _importo_label(importo, convenzione),
             "convenzione": convenzione,
             "search_source": source,
+            # FIX: esponi ai_active al frontend per badge e blocco suggerimenti AI
+            "ai_active": bool(os.environ.get("GROQ_API_KEY", "")),
             "results": results,
             "elapsed_ms": elapsed_ms,
         }
