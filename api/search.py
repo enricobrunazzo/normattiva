@@ -5,13 +5,12 @@ from html import unescape
 import json
 import os
 import re
-import socket
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 
 from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase
+from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
 # ── Defensive startup log ────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
@@ -40,31 +39,24 @@ SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
 
-# ── Numero massimo di candidati passati a Groq (ranking) ─────────────────────
 GROQ_MAX_CANDIDATES = 12
+MIN_SCORE_FOR_GROQ  = 2
 
-# ── Score minimo per entrare nel pool Groq ────────────────────────────────────
-MIN_SCORE_FOR_GROQ = 2
-
-# ── Modelli Groq ──────────────────────────────────────────────────────────────
 MODEL_EXPAND = "openai/gpt-oss-20b"
 MODEL_RANK   = "openai/gpt-oss-120b"
 
-# ── Header Groq — necessari per bypassare Cloudflare WAF da IP datacenter ────
 _GROQ_HEADERS = {
-    "Content-Type":  "application/json",
-    "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Origin":        "https://console.groq.com",
-    "Referer":       "https://console.groq.com/",
-    "Accept":        "application/json",
+    "Content-Type":    "application/json",
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Origin":          "https://console.groq.com",
+    "Referer":         "https://console.groq.com/",
+    "Accept":          "application/json",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# ── Cache in memoria per il testo vigente da Normattiva ───────────────────────
 _NORM_TEXT_CACHE: dict = {}
 _CACHE_TTL = 60 * 60 * 6
 
-# ── Fetch live ────────────────────────────────────────────────────────────────
 K_FETCH_LIVE            = 3
 FETCH_TIMEOUT_PER_NORMA = 3
 FETCH_BUDGET_TOTAL      = 4
@@ -484,9 +476,7 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         headers = {**_GROQ_HEADERS, "Authorization": f"Bearer {api_key}"}
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
-            data=payload,
-            headers=headers,
-            method="POST",
+            data=payload, headers=headers, method="POST",
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = json.loads(resp.read().decode())
@@ -501,6 +491,7 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
 
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
     matched: dict = {}
+
     def _add(nid: str, score: int = 1) -> None:
         norma = NORME_BY_ID.get(nid)
         if norma is None:
@@ -508,12 +499,14 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzi
         if norma.get("convenzione_only", False) and not convenzione:
             return
         matched[nid] = matched.get(nid, 0) + score
+
     def _lookup(tag: str, score: int) -> None:
         for nid in TAG_INDEX.get(tag, []):
             _add(nid, score)
         if convenzione:
             for nid in TAG_INDEX_CONV.get(tag, []):
                 _add(nid, score)
+
     if tipo_atto and tipo_atto.lower() in TIPO_ATTO_TAGS:
         for tag in TIPO_ATTO_TAGS[tipo_atto.lower()]:
             _lookup(tag, 2)
@@ -568,15 +561,17 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             f"- Convenzione: {'sì' if convenzione else 'no'}\n"
             f"- Descrizione esigenza: {testo}\n\n"
             "Norme candidate:\n" + "\n".join(norme_lines) + "\n\n"
-            "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche>\"}]}"
+            "ISTRUZIONI:\n"
+            "- Includi nella lista ranked SOLO le norme genuinamente pertinenti alla query.\n"
+            "- Se una norma non è pertinente, NON includerla nel ranked (non serve scriverlo, omettila).\n"
+            "- Per ogni norma inclusa scrivi 1-2 frasi specifiche di motivation.\n"
+            "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<motivazione>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
         headers = {**_GROQ_HEADERS, "Authorization": f"Bearer {api_key}"}
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
-            data=payload,
-            headers=headers,
-            method="POST",
+            data=payload, headers=headers, method="POST",
         )
         with urllib.request.urlopen(req, timeout=25) as resp:
             body = json.loads(resp.read().decode())
@@ -593,13 +588,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
                 norma["ai_motivation"] = ranked_map.get(nid, "")
                 norma["text_vigente_disponibile"] = bool(norma.get("text_vigente", "").strip())
                 reranked.append(norma)
-        seen = {n["id"] for n in reranked}
-        for n in groq_candidates:
-            if n["id"] not in seen:
-                n_copy = n.copy()
-                n_copy["text_vigente_disponibile"] = bool(n.get("text_vigente", "").strip())
-                reranked.append(n_copy)
-        print(f"[GROQ RANK] reranked={len(reranked)} norme", flush=True)
+        print(f"[GROQ RANK] reranked={len(reranked)} norme pertinenti (omesse le non pertinenti)", flush=True)
         return reranked + remaining
     except Exception as exc:
         print(f"[GROQ ERROR] {type(exc).__name__}: {exc}", flush=True)
@@ -610,7 +599,6 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
-        # FIX: leggi "testo" (parametro del frontend) con fallback a "q"
         testo = params.get("testo", [""])[0].strip() or params.get("q", [""])[0].strip()
         tipo_atto = params.get("tipo_atto", [""])[0].strip().lower()
         oggetto = params.get("oggetto", [""])[0].strip()
@@ -619,9 +607,11 @@ class handler(BaseHTTPRequestHandler):
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
+        # 1. Espansione tag via Groq
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
         full_query = f"{testo} {oggetto}".strip()
 
+        # 2. Ricerca candidati (Supabase vector o fallback tag)
         candidates = supabase_vector_search(full_query, convenzione=convenzione)
         source = "supabase"
         if not candidates:
@@ -629,8 +619,26 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
+        # 3. Fetch testo vigente in parallelo
         _fetch_norme_parallel(candidates)
-        results = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
+
+        # 4. Ranking Groq: restituisce SOLO le norme che ritiene pertinenti
+        ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
+
+        # 5. Filtro di sicurezza: rimuovi eventuali residui non pertinenti via ai_motivation
+        results = filter_pertinent(ranked)
+        print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
+
+        # 6. Se i risultati sono pochi (o zero), scopri norme mancanti via Groq
+        new_norme_added: list[str] = []
+        if len(results) < 3 and os.environ.get("GROQ_API_KEY", ""):
+            discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
+            if discovered:
+                persisted = persist_discovered_norme(discovered)
+                results = results + persisted
+                new_norme_added = [n.get("id", "") for n in persisted]
+                print(f"[DISCOVER] aggiunte {len(new_norme_added)} norme nuove: {new_norme_added}", flush=True)
+
         elapsed_ms = round((time.time() - t_start) * 1000)
 
         output = {
@@ -640,8 +648,8 @@ class handler(BaseHTTPRequestHandler):
             "importo_label": _importo_label(importo, convenzione),
             "convenzione": convenzione,
             "search_source": source,
-            # FIX: esponi ai_active al frontend per badge e blocco suggerimenti AI
             "ai_active": bool(os.environ.get("GROQ_API_KEY", "")),
+            "new_norme_added": new_norme_added,
             "results": results,
             "elapsed_ms": elapsed_ms,
         }
@@ -673,5 +681,4 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-# Alias top-level esplicito richiesto dal parser statico di Vercel CLI 54+
 handler = handler
