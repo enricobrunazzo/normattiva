@@ -399,23 +399,23 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
             raw = resp.read()
             encoding = resp.headers.get_content_charset() or "utf-8"
             html_text = raw.decode(encoding, errors="replace")
-        cleaned = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", html_text, flags=re.S | re.I)
+        cleaned = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html_text, flags=re.S | re.I)
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=["\\']?[^"\\']*(?:atto|norma|testo|corpo|content)[^"\\']*["\\']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=["\\']?main["\\']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=["\']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=["\']?main["\']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
                 block = m.group(1)
                 break
         if not block:
-            m2 = re.search(r"<body[^>]*>([\\s\\S]*?)</body>", cleaned, flags=re.I)
+            m2 = re.search(r"<body[^>]*>([\s\S]*?)</body>", cleaned, flags=re.I)
             block = m2.group(1) if m2 else cleaned
         text = re.sub(r"<[^>]+>", " ", block)
         text = unescape(text)
-        text = re.sub(r"\\s+", " ", text).strip()[:8000]
+        text = re.sub(r"\s+", " ", text).strip()[:8000]
         _NORM_TEXT_CACHE[url] = {"text": text, "fetched_at": now}
         return text
     except Exception:
@@ -444,13 +444,13 @@ def _extract_json(raw: str) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
-    m = re.search(r"```(?:json)?\\s*([\\s\\S]*?)```", raw)
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
     if m:
         try:
             return json.loads(m.group(1).strip())
         except json.JSONDecodeError:
             pass
-    m = re.search(r"(\\{[\\s\\S]*\\})", raw)
+    m = re.search(r"(\{[\s\S]*\})", raw)
     if m:
         return json.loads(m.group(1))
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
@@ -463,11 +463,11 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
     tag_list_str = ", ".join(_ALL_VALID_TAGS)
     full_query = f"{testo} {oggetto}".strip()
     prompt = (
-        "Sei un esperto di diritto amministrativo italiano e di contratti pubblici.\\n"
-        "Restituisci SOLO i tag più rilevanti tra quelli forniti.\\n\\n"
-        f"Richiesta:\\n- Tipo atto: {tipo_atto or 'non specificato'}\\n- Testo: {full_query}\\n\\n"
-        f"Tag disponibili:\\n{tag_list_str}\\n\\n"
-        "Restituisci JSON: {\\"tags\\": [\\"tag1\\", \\\"tag2\\\"]}"
+        "Sei un esperto di diritto amministrativo italiano e di contratti pubblici.\n"
+        "Restituisci SOLO i tag più rilevanti tra quelli forniti.\n\n"
+        f"Richiesta:\n- Tipo atto: {tipo_atto or 'non specificato'}\n- Testo: {full_query}\n\n"
+        f"Tag disponibili:\n{tag_list_str}\n\n"
+        "Restituisci JSON: {\"tags\": [\"tag1\", \"tag2\"]}"
     )
     try:
         payload = json.dumps({"model": MODEL_EXPAND, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 256}).encode()
@@ -508,7 +508,7 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzi
     for tag in (expanded_tags or []):
         _lookup(tag, 3)
     full_text = f"{testo} {oggetto}".lower()
-    tokens = re.split(r"[\\s,./;:()\\[\\]\\\"']+", full_text)
+    tokens = re.split(r"[\s,./;:()[\]\"']+", full_text)
     for token in tokens:
         token = token.strip()
         if not token or token in STOP_WORDS or len(token) < 3:
@@ -544,17 +544,17 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
-                line += f"\\n  [Testo vigente]: {testo_vigente[:600].replace('\\n', ' ')}..."
+                line += f"\n  [Testo vigente]: {testo_vigente[:600].replace('\n', ' ')}..."
             norme_lines.append(line)
         prompt = (
-            "Sei un esperto di diritto amministrativo italiano.\\n"
-            f"- Tipo atto: {tipo_atto or 'non specificato'}\\n"
-            f"- Oggetto: {oggetto or 'non specificato'}\\n"
-            f"- Importo: {importo or 'non specificato'}\\n"
-            f"- Convenzione: {'sì' if convenzione else 'no'}\\n"
-            f"- Descrizione esigenza: {testo}\\n\\n"
-            "Norme candidate:\\n" + "\\n".join(norme_lines) + "\\n\\n"
-            "Restituisci JSON: {\\"ranked\\": [{\\"id\\": \\\"<id_norma>\\\", \\\"motivation\\\": \\\"<1-2 frasi specifiche>\\\"}]}"
+            "Sei un esperto di diritto amministrativo italiano.\n"
+            f"- Tipo atto: {tipo_atto or 'non specificato'}\n"
+            f"- Oggetto: {oggetto or 'non specificato'}\n"
+            f"- Importo: {importo or 'non specificato'}\n"
+            f"- Convenzione: {'sì' if convenzione else 'no'}\n"
+            f"- Descrizione esigenza: {testo}\n\n"
+            "Norme candidate:\n" + "\n".join(norme_lines) + "\n\n"
+            "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
         req = urllib.request.Request(
@@ -652,3 +652,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
+
+
+# Alias top-level esplicito richiesto dal parser statico di Vercel CLI 54+
+handler = handler

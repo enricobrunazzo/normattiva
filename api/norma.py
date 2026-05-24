@@ -132,212 +132,60 @@ ARTICOLI_TESTO = {
             "servizi e forniture, gli enti locali adottano apposita determinazione del responsabile del "
             "servizio con cui si determina di procedere alla stipula del contratto, il fine che con il "
             "contratto si intende perseguire, l'oggetto del contratto, la sua forma, le clausole ritenute "
-            "essenziali, le modalità di scelta del contraente e le ragioni che ne sono alla base. "
-            "La determinazione a contrarre è l'atto fondativo di ogni procedura di acquisto."
-        ),
-        "art. 183 — assunzione impegno di spesa": (
-            "L'impegno costituisce la prima fase del procedimento di spesa, con la quale viene accertata la "
-            "sussistenza della ragione del credito, determinata la somma da pagare, individuato il soggetto "
-            "creditore, indicata la ragione e costituito il vincolo sulle previsioni di bilancio. "
-            "Gli impegni di spesa sono assunti nei limiti dei rispettivi stanziamenti di competenza del "
-            "bilancio di previsione. Non è possibile adottare la determinazione a contrarre senza "
-            "contestuale impegno di spesa o attestazione di copertura finanziaria."
-        ),
-    },
-    "dlgs_165_2001": {
-        "art. 7 — gestione risorse e incarichi": (
-            "Le amministrazioni pubbliche disciplinano e organizzano il lavoro, anche agile, dei propri "
-            "dipendenti. Per esigenze cui non possono far fronte con personale in servizio, le "
-            "amministrazioni pubbliche possono conferire incarichi individuali, con contratti di lavoro "
-            "autonomo, ad esperti di particolare e comprovata specializzazione, a condizione che: "
-            "l'oggetto della prestazione sia coerente con le missioni istituzionali; l'amministrazione "
-            "abbia preliminarmente accertato l'impossibilità oggettiva di utilizzare risorse interne; "
-            "la prestazione sia di natura temporanea e altamente qualificata."
-        ),
-        "art. 19 — incarichi dirigenziali": (
-            "Per il conferimento di ciascun incarico di funzione dirigenziale si tiene conto, in relazione "
-            "alla natura e alle caratteristiche degli obiettivi prefissati, delle attitudini e delle "
-            "capacità professionali del singolo dirigente. Gli incarichi hanno durata da tre a cinque anni "
-            "e sono conferiti con provvedimento motivato, previo accordo con l'interessato, da parte degli "
-            "organi di vertice delle singole amministrazioni."
-        ),
-        "art. 36 — utilizzo flessibile": (
-            "Per le esigenze connesse con il fabbisogno ordinario le pubbliche amministrazioni assumono "
-            "esclusivamente con contratti di lavoro subordinato a tempo indeterminato. È consentito "
-            "il ricorso a contratti flessibili (a termine, somministrazione) esclusivamente per esigenze "
-            "temporanee e straordinarie, previa valutazione del fabbisogno e nel rispetto delle dotazioni "
-            "organiche e dei vincoli finanziari."
-        ),
-    },
-    "dlgs_196_2003": {
-        "art. 13 GDPR — informativa": (
-            "In caso di raccolta di dati personali presso l'interessato, il titolare del trattamento "
-            "fornisce all'interessato, nel momento in cui i dati personali sono ottenuti, le seguenti "
-            "informazioni: identità e dati di contatto del titolare; finalità e base giuridica del "
-            "trattamento; destinatari dei dati; periodo di conservazione; diritti dell'interessato "
-            "(accesso, rettifica, cancellazione, portabilità, opposizione). "
-            "Per le PA, la base giuridica è generalmente il compito di interesse pubblico (art. 6.1.e GDPR)."
-        ),
-        "art. 28 GDPR — responsabile trattamento": (
-            "Qualora un trattamento debba essere effettuato per conto del titolare del trattamento, "
-            "quest'ultimo ricorre unicamente a responsabili del trattamento che presentino garanzie "
-            "sufficienti. Il responsabile del trattamento (es. fornitore cloud, software house) è "
-            "designato con apposito contratto o atto giuridico (DPA — Data Processing Agreement) che "
-            "vincola il responsabile al titolare e ne definisce oggetto, durata, natura e finalità del "
-            "trattamento. Il DPA è obbligatorio e deve essere allegato al contratto di fornitura."
-        ),
-        "art. 32 GDPR — sicurezza trattamento": (
-            "Il titolare del trattamento e il responsabile del trattamento mettono in atto misure tecniche "
-            "e organizzative adeguate per garantire un livello di sicurezza adeguato al rischio, tra cui, "
-            "se del caso: la pseudonimizzazione e la cifratura dei dati personali; la capacità di "
-            "assicurare la continua riservatezza, integrità, disponibilità e resilienza dei sistemi. "
-            "Nel contesto degli acquisti PA, il fornitore deve dichiarare le misure di sicurezza adottate "
-            "nella propria offerta tecnica o nell'allegato tecnico al contratto."
-        ),
-    },
-    "dlgs_81_2008": {
-        "art. 26 — obblighi connessi ai contratti d'appalto (DUVRI)": (
-            "Il datore di lavoro, in caso di affidamento di lavori, servizi e forniture all'impresa "
-            "appaltatrice o a lavoratori autonomi all'interno della propria azienda, promuove la "
-            "cooperazione e il coordinamento. Nei contratti di appalto o d'opera o di somministrazione, "
-            "viene elaborato un unico documento di valutazione dei rischi (DUVRI) che indica le misure "
-            "adottate per eliminare i rischi da interferenze. Il DUVRI deve essere allegato al contratto "
-            "di appalto o di opera e adeguato in funzione dell'evoluzione dei lavori."
-        ),
-        "art. 17 — obblighi non delegabili": (
-            "Il datore di lavoro non può delegare le seguenti attività: la valutazione di tutti i rischi "
-            "con la conseguente elaborazione del documento di valutazione dei rischi (DVR); la designazione "
-            "del responsabile del servizio di prevenzione e protezione dai rischi (RSPP). "
-            "Negli appalti, la stazione appaltante deve verificare che il fornitore abbia adempiuto agli "
-            "obblighi di sicurezza non delegabili prima della stipula del contratto."
-        ),
-    },
-    "dlgs_118_2011": {
-        "art. 56 — principi contabili applicati": (
-            "Le regioni e gli enti locali adottano la contabilità finanziaria, cui affiancano, ai fini "
-            "conoscitivi, un sistema di contabilità economico-patrimoniale. I principi contabili applicati "
-            "sono allegati al presente decreto e ne costituiscono parte integrante. Il principio della "
-            "competenza finanziaria potenziata impone che le obbligazioni giuridiche attive e passive, "
-            "perfezionate con l'ente, devono essere registrate nelle scritture contabili con imputazione "
-            "all'esercizio in cui vengono a scadenza."
-        ),
-        "Allegato 4/2 — principio della competenza finanziaria": (
-            "Le spese sono impegnate nell'esercizio in cui l'obbligazione giuridica è perfezionata, con "
-            "imputazione all'esercizio in cui l'obbligazione viene a scadenza (esigibilità). Le spese per "
-            "beni e servizi si imputano nell'esercizio di consegna del bene o di ultimazione del servizio. "
-            "Le spese per investimenti si imputano in base al SAL (stato avanzamento lavori). "
-            "Il mancato rispetto del principio di competenza finanziaria potenziata costituisce "
-            "irregolarità contabile rilevabile dalla Corte dei conti."
-        ),
-    },
-    "pnrr_missione1": {
-        "Componente 1.1 — Infrastrutture digitali": (
-            "La componente 1.1 del PNRR finanzia la migrazione delle PA verso infrastrutture cloud "
-            "sicure e affidabili (Polo Strategico Nazionale — PSN) e il consolidamento dei data center. "
-            "Gli enti che aderiscono devono rispettare le Misure Minime di Sicurezza ICT per le PA "
-            "(Circolare AgID n. 2/2017) e le Linee Guida per la classificazione dei dati e dei servizi "
-            "cloud. I contratti di migrazione cloud finanziati dal PNRR richiedono codice CUP e "
-            "rendicontazione specifica verso il MEF."
-        ),
-        "Componente 1.2 — Abilitazione migrazione al cloud": (
-            "La componente 1.2 supporta le PA nella qualificazione dei servizi cloud e nella migrazione "
-            "delle applicazioni. I fornitori cloud devono essere qualificati AgID (categoria IaaS, PaaS, "
-            "SaaS). L'acquisto di servizi cloud non qualificati AgID non è ammissibile come spesa PNRR. "
-            "Le PA devono attestare il livello di maturità digitale prima e dopo la migrazione "
-            "attraverso il DTM (Digital Transformation Management)."
-        ),
-    },
-    "l_136_2010": {
-        "art. 3 — obblighi di tracciabilità dei flussi finanziari": (
-            "Al fine di assicurare la tracciabilità dei flussi finanziari finalizzata a prevenire "
-            "infiltrazioni criminali, gli appaltatori, i subappaltatori e i subcontraenti della filiera "
-            "delle imprese nonché i concessionari di finanziamenti pubblici anche europei a qualsiasi "
-            "titolo interessati ai lavori, ai servizi e alle forniture pubblici devono utilizzare uno o "
-            "più conti correnti bancari o postali dedicati, anche non in via esclusiva, alle commesse "
-            "pubbliche. Tutti i movimenti finanziari relativi alle commesse pubbliche devono essere "
-            "registrati su tali conti correnti dedicati."
-        ),
-        "art. 3 co. 5 — obbligo CIG e CUP": (
-            "I pagamenti destinati a dipendenti, consulenti e fornitori di beni e servizi rientranti tra "
-            "le spese generali nonché quelli destinati all'acquisto di immobilizzazioni tecniche devono "
-            "essere eseguiti tramite conto corrente dedicato. Ai fini della tracciabilità dei flussi "
-            "finanziari, il bonifico bancario o postale, ovvero gli altri strumenti di pagamento idonei "
-            "a consentire la piena tracciabilità delle operazioni, devono riportare, in relazione a "
-            "ciascuna transazione posta in essere dai soggetti di cui al comma 1, il CIG e, ove obbligatorio, il CUP."
-        ),
-        "art. 6 — sanzioni per violazione tracciabilità": (
-            "La violazione, da parte dei soggetti di cui all'articolo 3, degli obblighi di tracciabilità "
-            "dei flussi finanziari costituisce causa di risoluzione del contratto. Il mancato utilizzo del "
-            "bonifico bancario o postale ovvero degli altri strumenti idonei a consentire la piena "
-            "tracciabilità delle operazioni costituisce causa di risoluzione del contratto. "
-            "L'Autorità Nazionale Anticorruzione (ANAC) è competente alla vigilanza sul rispetto "
-            "degli obblighi di tracciabilità."
+            "essenziali, le modalità di scelta del contraente e le ragioni che ne sono alla base."
         ),
     },
 }
 
 
-# Importa il DB dal modulo search (lazy, per evitare doppia definizione)
-def _get_db():
-    try:
-        from search import NORMATIVE_DB, NORME_BY_ID
-        return NORMATIVE_DB, NORME_BY_ID
-    except ImportError:
-        return [], {}
-
-
 class handler(BaseHTTPRequestHandler):
-
     def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        norma_id = params.get("id", [""])[0].strip()
+
+        if not norma_id:
+            self._send_error(400, "Parametro 'id' mancante")
+            return
+
+        # Import lazy del DB dalla cartella api/
         try:
-            parsed = urllib.parse.urlparse(self.path)
-            params = urllib.parse.parse_qs(parsed.query)
-            norma_id = params.get("id", [""])[0].strip()
+            from api.search import NORME_BY_ID
+        except ImportError:
+            from search import NORME_BY_ID  # type: ignore
 
-            if not norma_id:
-                self._send_json({"error": "Parametro 'id' obbligatorio"}, 400)
-                return
+        norma = NORME_BY_ID.get(norma_id)
+        if not norma:
+            self._send_error(404, f"Norma '{norma_id}' non trovata")
+            return
 
-            _, NORME_BY_ID = _get_db()
-            norma = NORME_BY_ID.get(norma_id)
+        result = norma.copy()
+        result["articoli_testo"] = ARTICOLI_TESTO.get(norma_id, {})
 
-            if not norma:
-                self._send_json({"error": f"Norma '{norma_id}' non trovata"}, 404)
-                return
-
-            # Arricchisce con testi articoli
-            articoli_con_testo = []
-            testi_norma = ARTICOLI_TESTO.get(norma_id, {})
-            for art in norma.get("articoli_chiave", []):
-                articoli_con_testo.append({
-                    "label": art,
-                    "testo": testi_norma.get(art, ""),
-                })
-
-            result = {
-                **norma,
-                "articoli_dettaglio": articoli_con_testo,
-            }
-            self._send_json(result)
-
-        except Exception as e:
-            self._send_json({"error": str(e)}, 500)
-
-    def do_OPTIONS(self):
+        body = json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(200)
-        self._cors()
-        self.end_headers()
-
-    def _send_json(self, data: dict, status: int = 200):
-        body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
-        self.send_response(status)
-        self._cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _cors(self):
+    def do_OPTIONS(self):
+        self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def _send_error(self, code: int, msg: str) -> None:
+        body = json.dumps({"error": msg}, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+# Alias top-level esplicito richiesto dal parser statico di Vercel CLI 54+
+handler = handler
