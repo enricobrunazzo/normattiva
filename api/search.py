@@ -50,6 +50,16 @@ MIN_SCORE_FOR_GROQ = 2
 MODEL_EXPAND = "openai/gpt-oss-20b"
 MODEL_RANK   = "openai/gpt-oss-120b"
 
+# ── Header Groq — necessari per bypassare Cloudflare WAF da IP datacenter ────
+_GROQ_HEADERS = {
+    "Content-Type":  "application/json",
+    "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Origin":        "https://console.groq.com",
+    "Referer":       "https://console.groq.com/",
+    "Accept":        "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 # ── Cache in memoria per il testo vigente da Normattiva ───────────────────────
 _NORM_TEXT_CACHE: dict = {}
 _CACHE_TTL = 60 * 60 * 6
@@ -471,17 +481,21 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
     )
     try:
         payload = json.dumps({"model": MODEL_EXPAND, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 256}).encode()
+        headers = {**_GROQ_HEADERS, "Authorization": f"Bearer {api_key}"}
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
             data=payload,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = json.loads(resp.read().decode())
         data = _extract_json(body["choices"][0]["message"]["content"])
-        return [t for t in data.get("tags", []) if t in set(_ALL_VALID_TAGS)]
-    except Exception:
+        tags = [t for t in data.get("tags", []) if t in set(_ALL_VALID_TAGS)]
+        print(f"[GROQ EXPAND] tags={tags}", flush=True)
+        return tags
+    except Exception as exc:
+        print(f"[GROQ EXPAND ERROR] {type(exc).__name__}: {exc}", flush=True)
         return []
 
 
@@ -508,7 +522,7 @@ def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzi
     for tag in (expanded_tags or []):
         _lookup(tag, 3)
     full_text = f"{testo} {oggetto}".lower()
-    tokens = re.split(r"[\s,./;:()[\]\"']+", full_text)
+    tokens = re.split(r"[\s,./;:()\[\]\"']+", full_text)
     for token in tokens:
         token = token.strip()
         if not token or token in STOP_WORDS or len(token) < 3:
@@ -544,7 +558,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
-                line += f"\n  [Testo vigente]: {testo_vigente[:600].replace('\n', ' ')}..."
+                line += f"\n  [Testo vigente]: {testo_vigente[:600].replace(chr(10), ' ')}..."
             norme_lines.append(line)
         prompt = (
             "Sei un esperto di diritto amministrativo italiano.\n"
@@ -557,10 +571,11 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<1-2 frasi specifiche>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
+        headers = {**_GROQ_HEADERS, "Authorization": f"Bearer {api_key}"}
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
             data=payload,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=25) as resp:
@@ -584,6 +599,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
                 n_copy = n.copy()
                 n_copy["text_vigente_disponibile"] = bool(n.get("text_vigente", "").strip())
                 reranked.append(n_copy)
+        print(f"[GROQ RANK] reranked={len(reranked)} norme", flush=True)
         return reranked + remaining
     except Exception as exc:
         print(f"[GROQ ERROR] {type(exc).__name__}: {exc}", flush=True)
