@@ -12,6 +12,11 @@
       "config": { "maxLambdaSize": "15mb" }
     },
     {
+      "src": "api/ingest.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb" }
+    },
+    {
       "src": "public/**",
       "use": "@vercel/static"
     }
@@ -19,6 +24,7 @@
   "routes": [
     { "src": "/api/search", "dest": "/api/search.py" },
     { "src": "/api/norma",  "dest": "/api/norma.py" },
+    { "src": "/api/ingest", "dest": "/api/ingest.py" },
     { "src": "/(.*)",       "dest": "/public/$1" }
   ]
 }
