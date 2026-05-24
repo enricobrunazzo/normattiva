@@ -1,8 +1,11 @@
 """
 Modulo di ricerca su Supabase con fallback al motore tag locale.
 
-Questa funzione sostituisce progressivamente _tag_search() in search.py:
-- Se Supabase è configurato e l'embedding è disponibile → ricerca vettoriale
+Embedding: Supabase AI built-in (gte-small, 384 dimensioni) — gratuito, zero dipendenze extra.
+Groq viene usato SOLO per LLM (query expansion + ranking), non per embedding.
+
+Flusso:
+- Se Supabase è configurato → genera embedding via Supabase AI → ricerca vettoriale
 - Altrimenti → fallback alla logica tag esistente (zero downtime)
 """
 
@@ -13,9 +16,6 @@ from typing import Optional
 
 _SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 _SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-_GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-
-EMBEDDING_MODEL = "nomic-embed-text-v1_5"
 
 
 def is_supabase_configured() -> bool:
@@ -23,26 +23,27 @@ def is_supabase_configured() -> bool:
 
 
 def get_embedding(text: str) -> Optional[list[float]]:
-    """Genera embedding della query via Groq."""
-    if not _GROQ_API_KEY:
+    """
+    Genera embedding via Supabase AI built-in (gte-small, 384 dim).
+    Non richiede API key esterna — usa la service role key di Supabase.
+    """
+    if not is_supabase_configured():
         return None
     try:
-        payload = json.dumps({
-            "model": EMBEDDING_MODEL,
-            "input": text[:2048],
-        }).encode()
+        payload = json.dumps({"input": text[:2048]}).encode()
         req = urllib.request.Request(
-            "https://api.groq.com/openai/v1/embeddings",
+            f"{_SUPABASE_URL}/functions/v1/embed",
             data=payload,
             headers={
-                "Authorization": f"Bearer {_GROQ_API_KEY}",
+                "Authorization": f"Bearer {_SUPABASE_KEY}",
                 "Content-Type": "application/json",
             },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             body = json.loads(resp.read().decode())
-        return body["data"][0]["embedding"]
+        # Supabase AI restituisce { "embedding": [...] }
+        return body.get("embedding") or body.get("data", [{}])[0].get("embedding")
     except Exception as exc:
         print(f"[EMBED ERROR] {type(exc).__name__}: {exc}", flush=True)
         return None
@@ -50,7 +51,7 @@ def get_embedding(text: str) -> Optional[list[float]]:
 
 def supabase_vector_search(
     query_text: str,
-    match_threshold: float = 0.60,
+    match_threshold: float = 0.55,
     match_count: int = 12,
     convenzione: bool = False,
 ) -> Optional[list[dict]]:
@@ -95,23 +96,26 @@ def supabase_vector_search(
         if not convenzione:
             results = [r for r in results if not r.get("convenzione_only", False)]
 
+        if not results:
+            return None
+
         # Normalizza al formato usato dal resto di search.py
         normalized = []
         for r in results:
             normalized.append({
-                "id":              r["norma_id"],
-                "titolo":          r["titolo"],
-                "estremi":         r["estremi"],
-                "descrizione":     r["descrizione"],
-                "articoli_chiave": r.get("articoli_chiave") or [],
-                "tags":            r.get("tags") or [],
-                "url_normattiva":  r.get("url_normattiva", ""),
-                "url_ricerca":     r.get("url_ricerca", ""),
+                "id":               r["norma_id"],
+                "titolo":           r["titolo"],
+                "estremi":          r["estremi"],
+                "descrizione":      r["descrizione"],
+                "articoli_chiave":  r.get("articoli_chiave") or [],
+                "tags":             r.get("tags") or [],
+                "url_normattiva":   r.get("url_normattiva", ""),
+                "url_ricerca":      r.get("url_ricerca", ""),
                 "convenzione_only": r.get("convenzione_only", False),
-                "testo_vigente":   r.get("testo_vigente", "") or "",
-                "score":           round(r.get("similarity", 0) * 100),
-                "ai_motivation":   "",
-                "similarity":      r.get("similarity", 0),
+                "text_vigente":     r.get("testo_vigente", "") or "",
+                "score":            round(r.get("similarity", 0) * 100),
+                "ai_motivation":    "",
+                "similarity":       r.get("similarity", 0),
             })
 
         print(
@@ -126,6 +130,47 @@ def supabase_vector_search(
         return None
 
 
+def insert_norma_to_supabase(norma: dict, embedding: list[float]) -> bool:
+    """
+    Inserisce o aggiorna una norma nel DB Supabase con il suo embedding.
+    Usato dal meccanismo di auto-discovery per norme non ancora presenti.
+    Ritorna True se l'operazione ha avuto successo.
+    """
+    if not is_supabase_configured():
+        return False
+    try:
+        payload = json.dumps([{
+            "norma_id":         norma["id"],
+            "titolo":           norma.get("titolo", ""),
+            "estremi":          norma.get("estremi", ""),
+            "descrizione":      norma.get("descrizione", ""),
+            "articoli_chiave":  norma.get("articoli_chiave", []),
+            "tags":             norma.get("tags", []),
+            "url_normattiva":   norma.get("url_normattiva", ""),
+            "url_ricerca":      norma.get("url_ricerca", ""),
+            "convenzione_only": norma.get("convenzione_only", False),
+            "testo_vigente":    norma.get("text_vigente", ""),
+            "embedding":        embedding,
+        }]).encode()
+        req = urllib.request.Request(
+            f"{_SUPABASE_URL}/rest/v1/norme",
+            data=payload,
+            headers={
+                "apikey":        _SUPABASE_KEY,
+                "Authorization": f"Bearer {_SUPABASE_KEY}",
+                "Content-Type":  "application/json",
+                "Prefer":        "resolution=merge-duplicates,return=minimal",
+            },
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+        print(f"[SUPA INSERT] norma_id={norma['id']!r} inserita/aggiornata", flush=True)
+        return True
+    except Exception as exc:
+        print(f"[SUPA INSERT ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return False
+
+
 def log_query_to_supabase(
     query_text: str,
     tipo_atto: str,
@@ -136,7 +181,7 @@ def log_query_to_supabase(
     elapsed_ms: int,
     groq_used: bool,
 ) -> None:
-    """Logga la query su Supabase in modo asincrono/best-effort."""
+    """Logga la query su Supabase in modo best-effort."""
     if not is_supabase_configured():
         return
     try:
@@ -163,4 +208,4 @@ def log_query_to_supabase(
         )
         urllib.request.urlopen(req, timeout=3)
     except Exception:
-        pass  # log fallure non deve bloccare la risposta
+        pass

@@ -1,6 +1,6 @@
 -- ============================================================
 -- Normattiva — Schema Supabase
--- Embedding: nomic-embed-text-v1_5 via Groq (768 dimensioni)
+-- Embedding: Supabase AI built-in gte-small (384 dimensioni)
 -- Esegui questo script UNA SOLA VOLTA nel SQL Editor di Supabase
 -- ============================================================
 
@@ -21,15 +21,16 @@ create table if not exists norme (
   convenzione_only  boolean default false,
   testo_vigente     text,
   testo_vigente_at  timestamptz,
-  embedding         vector(768),
+  embedding         vector(384),
   creato_il         timestamptz default now(),
   aggiornato_il     timestamptz default now()
 );
 
 -- 3. Indice vettoriale cosine (ivfflat)
+--    lists=10 è ottimale per < 1000 righe
 create index if not exists norme_embedding_idx
   on norme using ivfflat (embedding vector_cosine_ops)
-  with (lists = 50);
+  with (lists = 10);
 
 -- 4. Indice GIN su tags
 create index if not exists norme_tags_gin_idx
@@ -53,10 +54,10 @@ create table if not exists query_log (
   creato_il      timestamptz default now()
 );
 
--- 7. Funzione RPC ricerca vettoriale
+-- 7. Funzione RPC ricerca vettoriale (384 dim)
 create or replace function search_norme_by_embedding(
-  query_embedding  vector(768),
-  match_threshold  float default 0.60,
+  query_embedding  vector(384),
+  match_threshold  float default 0.55,
   match_count      int   default 12
 )
 returns table (
@@ -95,6 +96,12 @@ begin
 end;
 $$;
 
+drop trigger if exists norme_aggiornato_il on norme;
 create trigger norme_aggiornato_il
   before update on norme
   for each row execute function update_aggiornato_il();
+
+-- 9. Edge Function per embedding (deploy separato via Supabase CLI)
+-- Vedi: supabase/functions/embed/index.ts
+-- La funzione accetta POST { "input": "testo" } e restituisce { "embedding": [...] }
+-- usando il modello gte-small integrato in Supabase AI.
