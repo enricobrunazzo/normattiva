@@ -1,75 +1,76 @@
 -- ============================================================
 -- Normattiva — Schema Supabase
--- Esegui questo script una volta sola nel SQL Editor di Supabase
+-- Embedding: nomic-embed-text-v1_5 via Groq (768 dimensioni)
+-- Esegui questo script UNA SOLA VOLTA nel SQL Editor di Supabase
 -- ============================================================
 
--- Abilita l'estensione pgvector (necessaria per la ricerca semantica)
+-- 1. Abilita pgvector
 create extension if not exists vector;
 
--- ── Tabella principale delle norme ───────────────────────────────────────────
+-- 2. Tabella principale
 create table if not exists norme (
-  id            uuid primary key default gen_random_uuid(),
-  norma_id      text not null unique,          -- es. "dlgs_36_2023"
-  titolo        text not null,
-  estremi       text not null,
-  descrizione   text not null,
-  articoli_chiave text[] default '{}',
-  tags          text[] default '{}',
-  url_normattiva text,
-  url_ricerca   text,
-  convenzione_only boolean default false,
-  testo_vigente text,                          -- testo scraping Normattiva (aggiornabile)
-  testo_vigente_at timestamptz,               -- quando è stato aggiornato l'ultima volta
-  embedding     vector(1536),                 -- embedding del testo (descrizione + testo_vigente)
-  creato_il     timestamptz default now(),
-  aggiornato_il timestamptz default now()
+  id                uuid primary key default gen_random_uuid(),
+  norma_id          text not null unique,
+  titolo            text not null,
+  estremi           text not null,
+  descrizione       text not null,
+  articoli_chiave   text[] default '{}',
+  tags              text[] default '{}',
+  url_normattiva    text,
+  url_ricerca       text,
+  convenzione_only  boolean default false,
+  testo_vigente     text,
+  testo_vigente_at  timestamptz,
+  embedding         vector(768),
+  creato_il         timestamptz default now(),
+  aggiornato_il     timestamptz default now()
 );
 
--- ── Indice vettoriale (cosine similarity) ────────────────────────────────────
+-- 3. Indice vettoriale cosine (ivfflat)
 create index if not exists norme_embedding_idx
   on norme using ivfflat (embedding vector_cosine_ops)
   with (lists = 50);
 
--- ── Indice su tags (array GIN) ────────────────────────────────────────────────
+-- 4. Indice GIN su tags
 create index if not exists norme_tags_gin_idx
   on norme using gin (tags);
 
--- ── Indice su norma_id ───────────────────────────────────────────────────────
+-- 5. Indice su norma_id
 create index if not exists norme_norma_id_idx
   on norme (norma_id);
 
--- ── Tabella log delle query (per analytics e debug) ─────────────────────────
+-- 6. Tabella log query
 create table if not exists query_log (
-  id            uuid primary key default gen_random_uuid(),
-  query_text    text,
-  tipo_atto     text,
-  oggetto       text,
-  importo       text,
-  convenzione   boolean default false,
-  results_count int,
-  elapsed_ms    int,
-  groq_used     boolean default false,
-  creato_il     timestamptz default now()
+  id             uuid primary key default gen_random_uuid(),
+  query_text     text,
+  tipo_atto      text,
+  oggetto        text,
+  importo        text,
+  convenzione    boolean default false,
+  results_count  int,
+  elapsed_ms     int,
+  groq_used      boolean default false,
+  creato_il      timestamptz default now()
 );
 
--- ── Funzione RPC per ricerca vettoriale ──────────────────────────────────────
+-- 7. Funzione RPC ricerca vettoriale
 create or replace function search_norme_by_embedding(
-  query_embedding vector(1536),
-  match_threshold float default 0.65,
-  match_count     int   default 10
+  query_embedding  vector(768),
+  match_threshold  float default 0.60,
+  match_count      int   default 12
 )
 returns table (
-  norma_id      text,
-  titolo        text,
-  estremi       text,
-  descrizione   text,
-  articoli_chiave text[],
-  tags          text[],
-  url_normattiva text,
-  url_ricerca   text,
-  convenzione_only boolean,
-  testo_vigente text,
-  similarity    float
+  norma_id          text,
+  titolo            text,
+  estremi           text,
+  descrizione       text,
+  articoli_chiave   text[],
+  tags              text[],
+  url_normattiva    text,
+  url_ricerca       text,
+  convenzione_only  boolean,
+  testo_vigente     text,
+  similarity        float
 )
 language sql stable
 as $$
@@ -85,7 +86,7 @@ as $$
   limit match_count;
 $$;
 
--- ── Trigger aggiornamento timestamp ──────────────────────────────────────────
+-- 8. Trigger aggiornamento timestamp
 create or replace function update_aggiornato_il()
 returns trigger language plpgsql as $$
 begin
