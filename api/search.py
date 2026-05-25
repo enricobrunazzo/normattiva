@@ -24,13 +24,13 @@ print(
 if not _GROQ_API_KEY_PRESENT:
     print(
         "[INIT] WARNING: GROQ_API_KEY non trovata nell'ambiente. "
-        "Verifica Settings \u2192 Environment Variables su Vercel e fai un nuovo deploy.",
+        "Verifica Settings → Environment Variables su Vercel e fai un nuovo deploy.",
         flush=True,
     )
 if not _SUPABASE_CONFIGURED:
     print(
         "[INIT] WARNING: SUPABASE_URL / SUPABASE_KEY non trovate. "
-        "User\u00f2 il fallback locale su tag.",
+        "Userò il fallback locale su tag.",
         flush=True,
     )
 
@@ -88,7 +88,7 @@ NORMATIVE_DB = [
         "titolo": "Codice dell'Amministrazione Digitale (CAD)",
         "estremi": "D.Lgs. 7 marzo 2005, n. 82",
         "descrizione": "Regola la digitalizzazione della PA, l'uso di software, cloud computing e servizi ICT. Stabilisce l'obbligo di preferenza per soluzioni open source (art. 68) e il riuso del software (art. 69).",
-        "articoli_chiave": ["art. 68 — analisi comparativa soluzioni", "art. 69 — riuso del software", "art. 50 — disponibilit\u00e0 dei dati"],
+        "articoli_chiave": ["art. 68 — analisi comparativa soluzioni", "art. 69 — riuso del software", "art. 50 — disponibilità dei dati"],
         "tags": ["software", "cloud", "digitalizzazione", "ict", "dati", "agid", "open-source", "riuso"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2005-03-07;82",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=codice+amministrazione+digitale+CAD+82+2005",
@@ -137,7 +137,7 @@ NORMATIVE_DB = [
         "id": "dlgs_196_2003",
         "titolo": "Codice Privacy + GDPR",
         "estremi": "D.Lgs. 30 giugno 2003, n. 196 (mod. dal Reg. UE 2016/679)",
-        "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR \u00e8 direttamente applicabile. Rilevante per acquisti di software, cloud e qualsiasi trattamento dati personali da parte della PA.",
+        "descrizione": "Disciplina il trattamento dei dati personali. Il GDPR è direttamente applicabile. Rilevante per acquisti di software, cloud e qualsiasi trattamento dati personali da parte della PA.",
         "articoli_chiave": ["art. 13 GDPR — informativa", "art. 28 GDPR — responsabile trattamento", "art. 32 GDPR — sicurezza trattamento"],
         "tags": ["privacy", "dati", "gdpr", "trattamento", "personali", "software", "cloud"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2003-06-30;196",
@@ -175,11 +175,11 @@ NORMATIVE_DB = [
     },
     {
         "id": "l_136_2010",
-        "titolo": "Tracciabilit\u00e0 dei flussi finanziari (CIG/CUP)",
+        "titolo": "Tracciabilità dei flussi finanziari (CIG/CUP)",
         "estremi": "L. 13 agosto 2010, n. 136",
         "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti dedicati e strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG e, se finanziato con fondi pubblici, il CUP. La mancata indicazione nelle determine costituisce violazione.",
-        "articoli_chiave": ["art. 3 — obblighi di tracciabilit\u00e0 dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilit\u00e0"],
-        "tags": ["cig", "cup", "tracciabilit\u00e0", "rup", "tracciabilita", "flussi", "contratto", "appalto", "affidamento", "acquisto"],
+        "articoli_chiave": ["art. 3 — obblighi di tracciabilità dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilità"],
+        "tags": ["cig", "cup", "tracciabilità", "rup", "tracciabilita", "flussi", "contratto", "appalto", "affidamento", "acquisto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
@@ -187,8 +187,8 @@ NORMATIVE_DB = [
         "id": "l_241_1990",
         "titolo": "Legge sul procedimento amministrativo",
         "estremi": "L. 7 agosto 1990, n. 241",
-        "descrizione": "Regola il procedimento amministrativo in tutte le sue fasi: avvio, istruttoria, partecipazione dei privati, motivazione degli atti, silenzio-assenso, accesso agli atti. \u00c8 il riferimento trasversale per la legittimit\u00e0 di qualsiasi provvedimento della PA, incluse determine e delibere.",
-        "articoli_chiave": ["art. 1 — principi generali (efficacia, economicit\u00e0, imparzialit\u00e0)", "art. 3 — obbligo di motivazione del provvedimento", "art. 7 — comunicazione avvio del procedimento", "art. 21-octies — annullabilit\u00e0 del provvedimento", "art. 22 — accesso agli atti amministrativi"],
+        "descrizione": "Regola il procedimento amministrativo in tutte le sue fasi: avvio, istruttoria, partecipazione dei privati, motivazione degli atti, silenzio-assenso, accesso agli atti. È il riferimento trasversale per la legittimità di qualsiasi provvedimento della PA, incluse determine e delibere.",
+        "articoli_chiave": ["art. 1 — principi generali (efficacia, economicità, imparzialità)", "art. 3 — obbligo di motivazione del provvedimento", "art. 7 — comunicazione avvio del procedimento", "art. 21-octies — annullabilità del provvedimento", "art. 22 — accesso agli atti amministrativi"],
         "tags": ["procedimento", "motivazione", "accesso", "provvedimento", "determina", "delibera", "legittimita", "silenzio"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1990-08-07;241",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+241+1990+procedimento+amministrativo",
@@ -197,7 +197,7 @@ NORMATIVE_DB = [
         "id": "dlgs_50_2016",
         "titolo": "Codice dei contratti pubblici 2016 (previgente)",
         "estremi": "D.Lgs. 18 aprile 2016, n. 50",
-        "descrizione": "Codice appalti previgente, abrogato dal D.Lgs. 36/2023 ma ancora applicabile ai contratti aggiudicati prima del 1\u00b0 luglio 2023 e ai procedimenti in corso. Rilevante per contestare o gestire appalti storici, proroghe e collaudi di contratti avviati sotto la vecchia disciplina.",
+        "descrizione": "Codice appalti previgente, abrogato dal D.Lgs. 36/2023 ma ancora applicabile ai contratti aggiudicati prima del 1° luglio 2023 e ai procedimenti in corso. Rilevante per contestare o gestire appalti storici, proroghe e collaudi di contratti avviati sotto la vecchia disciplina.",
         "articoli_chiave": ["art. 36 — contratti sotto soglia (affidamento diretto, procedura negoziata)", "art. 63 — procedura negoziata senza bando", "art. 95 — criteri di aggiudicazione", "art. 106 — modifica dei contratti in corso"],
         "tags": ["proroga", "affidamento", "appalto", "previgente", "storico", "collaudo", "modifica"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2016-04-18;50",
@@ -207,7 +207,7 @@ NORMATIVE_DB = [
         "id": "l_296_2006_consip",
         "titolo": "Obbligo Consip / MEPA (L. Finanziaria 2007)",
         "estremi": "L. 27 dicembre 2006, n. 296, art. 1 co. 449-450",
-        "descrizione": "Obbliga le amministrazioni statali ad approvvigionarsi tramite convenzioni Consip o a utilizzarne i parametri come prezzi di riferimento (benchmark). Le PA non statali (Comuni, Province, ASL) devono comunque ricorrere al MEPA o giustificare la convenienza economica di procedure autonome. Il mancato rispetto espone il RUP a responsabilit\u00e0 erariale.",
+        "descrizione": "Obbliga le amministrazioni statali ad approvvigionarsi tramite convenzioni Consip o a utilizzarne i parametri come prezzi di riferimento (benchmark). Le PA non statali (Comuni, Province, ASL) devono comunque ricorrere al MEPA o giustificare la convenienza economica di procedure autonome. Il mancato rispetto espone il RUP a responsabilità erariale.",
         "articoli_chiave": ["art. 1 co. 449 — obbligo adesione convenzioni Consip per PA statali", "art. 1 co. 450 — obbligo MEPA per acquisti sotto soglia comunitaria", "art. 1 co. 452 — benchmark prezzi Consip per PA non statali"],
         "tags": ["mepa", "consip", "benchmark", "convenzione", "acquisto"],
         "convenzione_only": True,
@@ -216,10 +216,10 @@ NORMATIVE_DB = [
     },
     {
         "id": "dlgs_231_2001",
-        "titolo": "Responsabilit\u00e0 amministrativa degli enti (D.Lgs. 231)",
+        "titolo": "Responsabilità amministrativa degli enti (D.Lgs. 231)",
         "estremi": "D.Lgs. 8 giugno 2001, n. 231",
-        "descrizione": "Disciplina la responsabilit\u00e0 amministrativa delle persone giuridiche private per reati commessi nell'interesse o a vantaggio dell'ente. Rilevante negli appalti pubblici: la PA deve verificare che il fornitore privato sia dotato di Modello Organizzativo 231 (MOG) per prevenire reati di corruzione, frode e riciclaggio.",
-        "articoli_chiave": ["art. 5 — responsabilit\u00e0 dell'ente per reati dei propri soggetti", "art. 6 — esimenti: adozione ed efficace attuazione del MOG", "art. 24 — reati contro la PA (corruzione, concussione, frode)", "art. 25 — peculato, corruzione e induzione indebita"],
+        "descrizione": "Disciplina la responsabilità amministrativa delle persone giuridiche private per reati commessi nell'interesse o a vantaggio dell'ente. Rilevante negli appalti pubblici: la PA deve verificare che il fornitore privato sia dotato di Modello Organizzativo 231 (MOG) per prevenire reati di corruzione, frode e riciclaggio.",
+        "articoli_chiave": ["art. 5 — responsabilità dell'ente per reati dei propri soggetti", "art. 6 — esimenti: adozione ed efficace attuazione del MOG", "art. 24 — reati contro la PA (corruzione, concussione, frode)", "art. 25 — peculato, corruzione e induzione indebita"],
         "tags": ["mog", "231", "corruzione", "fornitore", "appalto", "responsabilita", "anticorruzione"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2001-06-08;231",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=decreto+legislativo+231+2001+responsabilita+amministrativa+enti",
@@ -258,7 +258,7 @@ NORMATIVE_DB = [
         "id": "l_104_1992",
         "titolo": "Legge-quadro per l'assistenza, l'integrazione sociale e i diritti delle persone handicappate",
         "estremi": "L. 5 febbraio 1992, n. 104",
-        "descrizione": "Legge quadro sull'assistenza e l'integrazione sociale delle persone con disabilit\u00e0. Attribuisce ai Comuni l'obbligo di garantire i servizi di assistenza, riabilitazione e integrazione.",
+        "descrizione": "Legge quadro sull'assistenza e l'integrazione sociale delle persone con disabilità. Attribuisce ai Comuni l'obbligo di garantire i servizi di assistenza, riabilitazione e integrazione.",
         "articoli_chiave": ["art. 3 — definizione handicap grave", "art. 8 — interventi a favore delle persone handicappate", "art. 10 — integrazione scolastica", "art. 33 — agevolazioni lavorative"],
         "tags": ["disabili", "handicap", "disabilita", "assistenza", "integrazione", "servizi-sociali", "sociale", "comune", "retta", "contributo", "permessi", "welfare", "prestazione"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1992-02-05;104",
@@ -363,7 +363,7 @@ _ALL_VALID_TAGS = sorted(set(tag for norma in NORMATIVE_DB for tag in norma["tag
 
 def _parse_importo(importo_str: str) -> float | None:
     try:
-        return float(importo_str.replace(".", "").replace(",", ".").replace("\u20ac", "").strip())
+        return float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
     except (ValueError, AttributeError):
         return None
 
@@ -388,14 +388,14 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
     if val is None:
         return ""
     if convenzione:
-        return f"\u20ac{val:,.0f} \u2014 Adesione a convenzione Consip / Ordine su MEPA"
+        return f"€{val:,.0f} — Adesione a convenzione Consip / Ordine su MEPA"
     if val <= SEMI_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
+        return f"€{val:,.0f} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
     elif val <= DIRECT_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto (art. 50, D.Lgs. 36/2023)"
+        return f"€{val:,.0f} — Affidamento diretto (art. 50, D.Lgs. 36/2023)"
     elif val <= NEGO_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Procedura negoziata (art. 72, D.Lgs. 36/2023)"
-    return f"\u20ac{val:,.0f} \u2014 Procedura aperta (art. 71, D.Lgs. 36/2023)"
+        return f"€{val:,.0f} — Procedura negoziata (art. 72, D.Lgs. 36/2023)"
+    return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
 def _is_proroga_query(testo: str, oggetto: str) -> bool:
@@ -488,7 +488,7 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
     full_query = f"{testo} {oggetto}".strip()
     prompt = (
         "Sei un esperto di diritto amministrativo italiano e di contratti pubblici.\n"
-        "Restituisci SOLO i tag pi\u00f9 rilevanti tra quelli forniti.\n\n"
+        "Restituisci SOLO i tag più rilevanti tra quelli forniti.\n\n"
         f"Richiesta:\n- Tipo atto: {tipo_atto or 'non specificato'}\n- Testo: {full_query}\n\n"
         f"Tag disponibili:\n{tag_list_str}\n\n"
         "Restituisci JSON: {\"tags\": [\"tag1\", \"tag2\"]}"
@@ -551,8 +551,8 @@ def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> l
     entry["text_vigente"] = ""
     entry["text_vigente_disponibile"] = False
     entry["ai_motivation"] = (
-        f"Per ogni contratto pubblico di importo superiore a \u20ac{SEMI_THRESHOLD:,} la stazione appaltante "
-        "\u00e8 obbligata ad acquisire il CIG (Codice Identificativo Gara) ai sensi dell'art. 3 co. 5 "
+        f"Per ogni contratto pubblico di importo superiore a €{SEMI_THRESHOLD:,} la stazione appaltante "
+        "è obbligata ad acquisire il CIG (Codice Identificativo Gara) ai sensi dell'art. 3 co. 5 "
         "della L. 136/2010 e a riportarlo nella determina a contrarre e nei documenti di pagamento. "
         "La mancata indicazione costituisce illecito amministrativo."
     )
@@ -574,7 +574,7 @@ def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: boo
         return results
     filtered = [r for r in results if r["id"] != "l_136_2010"]
     if len(filtered) < len(results):
-        print(f"[CIG FILTER] rimossa l_136_2010 (importo \u20ac{val:,.0f} \u2264 {SEMI_THRESHOLD:,} \u2014 CIG non obbligatorio)", flush=True)
+        print(f"[CIG FILTER] rimossa l_136_2010 (importo €{val:,.0f} ≤ {SEMI_THRESHOLD:,} — CIG non obbligatorio)", flush=True)
     return filtered
 
 
@@ -640,8 +640,8 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
     if _is_proroga_query(testo, oggetto):
         proroga_hint = (
             "- ATTENZIONE: la query riguarda un contratto storico, una proroga o un collaudo "
-            "avviato prima del 1\u00b0 luglio 2023. In questo caso il D.Lgs. 50/2016 (codice "
-            "previgente) \u00e8 OBBLIGATORIAMENTE pertinente e deve essere incluso nel ranked, "
+            "avviato prima del 1° luglio 2023. In questo caso il D.Lgs. 50/2016 (codice "
+            "previgente) è OBBLIGATORIAMENTE pertinente e deve essere incluso nel ranked, "
             "preferibilmente dopo il D.Lgs. 36/2023 (che regola il procedimento in corso) "
             "ma prima di tutte le altre norme.\n"
         )
@@ -649,7 +649,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
     try:
         norme_lines = []
         for n in groq_candidates:
-            line = f"- ID: {n['id']} | {n['estremi']} \u2014 {n['titolo']}"
+            line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
                 line += f"\n  [Testo vigente]: {testo_vigente[:600].replace(chr(10), ' ')}..."
@@ -659,17 +659,17 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             f"- Tipo atto: {tipo_atto or 'non specificato'}\n"
             f"- Oggetto: {oggetto or 'non specificato'}\n"
             f"- Importo: {importo or 'non specificato'}\n"
-            f"- Convenzione: {'s\u00ec' if convenzione else 'no'}\n"
+            f"- Convenzione: {'sì' if convenzione else 'no'}\n"
             f"- Descrizione esigenza: {testo}\n\n"
             "Norme candidate:\n" + "\n".join(norme_lines) + "\n\n"
             "ISTRUZIONI:\n"
             "- Includi nella lista ranked SOLO le norme genuinamente pertinenti alla query.\n"
-            "- Se una norma non \u00e8 pertinente, NON includerla nel ranked (non serve scriverlo, omettila).\n"
+            "- Se una norma non è pertinente, NON includerla nel ranked (non serve scriverlo, omettila).\n"
             "- Per ogni norma inclusa scrivi 1-2 frasi specifiche di motivation.\n"
             "- Se tra i candidati sono presenti sia dlgs_36_2023 che dlgs_50_2016, "
             "posiziona SEMPRE dlgs_36_2023 prima di dlgs_50_2016, "
             "salvo che la query riguardi esplicitamente contratti storici, proroghe o "
-            "collaudi di appalti avviati prima del 1\u00b0 luglio 2023.\n"
+            "collaudi di appalti avviati prima del 1° luglio 2023.\n"
             + proroga_hint +
             "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<motivazione>\"}]}"
         )
@@ -689,7 +689,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             nid = item["id"]
             norma = candidates_by_id.get(nid) or NORME_BY_ID.get(nid)
             if norma is None:
-                print(f"[GROQ RANK] ID {nid!r} non trovato nei candidati n\u00e9 nel DB locale, skip", flush=True)
+                print(f"[GROQ RANK] ID {nid!r} non trovato nei candidati né nel DB locale, skip", flush=True)
                 continue
             norma = norma.copy()
             norma["score"] = 100 - len(reranked)
@@ -823,7 +823,8 @@ class handler(BaseHTTPRequestHandler):
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
-                persisted = persist_discovered_norme(discovered)
+                # fix: passa query_text per abilitare similarity check D in persist_discovered_norme
+                persisted = persist_discovered_norme(discovered, query_text=testo)
                 existing_ids = {r.get("id") for r in results}
                 deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
                 results = results + deduped_persisted
