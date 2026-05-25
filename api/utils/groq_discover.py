@@ -24,8 +24,12 @@ _GROQ_HEADERS = {
 
 MODEL_RANK = "openai/gpt-oss-120b"
 
-# Segnali negativi nell'ai_motivation che indicano non pertinenza
+# Segnali negativi nell'ai_motivation che indicano NON pertinenza.
+# ATTENZIONE: usare solo frasi sufficientemente specifiche per evitare falsi positivi.
+# NON usare segnali condizionali generici come "solo se" / "solo qualora" che
+# compaiono anche in motivazioni legittime (es. "qualora l'edificio sia vincolato").
 _NON_PERTINENCE_SIGNALS = [
+    # Negazioni esplicite
     "non pertinente",
     "non ha attinenza",
     "non disciplina",
@@ -35,15 +39,15 @@ _NON_PERTINENCE_SIGNALS = [
     "non tratta",
     "non copre",
     "non concerne",
-    # Segnali che indicano pertinenza solo indiretta (PA-fornitore, non procedimento interno)
-    "solo se",
-    "solo qualora",
-    "eventualmente applicabile",
-    "applicabile solo in presenza di",
-    "non direttamente applicabile",
+    "non è pertinente",
+    "non è applicabile",
+    # Segnali specifici per norme PA-fornitore usate fuori contesto
+    "non è direttamente applicabile",
     "applicabile esclusivamente ai fornitori",
-    "riguarda i fornitori",
-    "disciplina i fornitori",
+    "riguarda esclusivamente i fornitori",
+    "disciplina esclusivamente i fornitori",
+    "applicabile solo ai soggetti privati",
+    "non riguarda procedimenti interni",
 ]
 
 # Norme già presenti nel DB locale: (numero, anno) estratti dagli estremi
@@ -132,7 +136,6 @@ def _normalize_id(norma: dict) -> str:
     nid = (norma.get("id") or "").strip().lower()
     estremi = (norma.get("estremi") or "").lower().strip()
 
-    # Determina il prefisso canonico dagli estremi
     canonical_prefix = None
     for pattern, prefix in _ESTREMI_TO_ID_PREFIX:
         if re.match(pattern, estremi, re.IGNORECASE):
@@ -142,7 +145,6 @@ def _normalize_id(norma: dict) -> str:
     if not canonical_prefix:
         return nid
 
-    # Estrae anno e numero dagli estremi
     numeri = re.findall(r"\b(\d{2,4})\b", estremi)
     anni = [n for n in numeri if 1980 <= int(n) <= 2030]
     numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
