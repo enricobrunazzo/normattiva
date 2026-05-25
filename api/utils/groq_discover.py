@@ -12,6 +12,8 @@ Validazione anti-allucinazione (pipeline persist_discovered_norme):
       titolo non generico (no titoli che iniziano con parole vuote senza numero legge)
   D — similarity check: embedding coseno tra testo query e descrizione norma;
       se similarity < DISCOVER_MIN_SIMILARITY → norma scartata come irrilevante
+  U — URL strutturale check: l'URL normattiva.it deve contenere 'urn:nir:stato:' nel path;
+      URL con encoding base64 o path non canonici vengono scartati prima della HEAD request
 """
 
 import json
@@ -108,6 +110,7 @@ _LOCAL_DB_NORME_IDS = {
 _BLOCKLIST_ESTREMI = [
     ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
     ("117", "2017", "D.Lgs. 117/2017 = Codice Terzo Settore, non pertinente per appalti ordinari PA"),
+    ("135", "2012", "L. 135/2012 = Spending Review, spesso confusa da Groq con norme sull'efficienza energetica"),
 ]
 
 # Mappa: prefisso estremi -> tipo URN normattiva.it
@@ -352,37 +355,79 @@ def _check_discover_similarity(
     return ok
 
 
+def _is_valid_url_normattiva(url: str) -> bool:
+    """
+    Opzione U — Validazione strutturale URL normattiva.it (pre-HEAD).
+
+    Un URL normattiva.it autentico deve:
+    1. Puntare al dominio normattiva.it
+    2. Contenere 'urn:nir:stato:' nel path (canone URN italiano)
+
+    URL con encoding base64, path generici o URN offuscati vengono scartati
+    immediatamente senza fare richieste HTTP, evitando falsi 301/302.
+    """
+    if not url:
+        return False
+    url_lower = url.lower()
+    # Deve contenere il dominio normattiva.it
+    if "normattiva.it" not in url_lower:
+        print(f"[PERSIST] URL_STRUCT: URL non su normattiva.it → {url[:80]!r}", flush=True)
+        return False
+    # Deve contenere il pattern URN canonico italiano
+    if "urn:nir:stato:" not in url_lower and "urn%3anir%3astato%3a" not in url_lower:
+        print(
+            f"[PERSIST] URL_STRUCT: URL manca 'urn:nir:stato:' → probabile allucinazione: {url[:80]!r}",
+            flush=True,
+        )
+        return False
+    return True
+
+
 def _check_url_normattiva_exists(norma: dict) -> bool:
     """
-    Verifica che l'URL normattiva.it della norma risponda con un codice HTTP
-    valido (200, 301, 302).
-    - HEAD request, timeout 8s.
+    Verifica che l'URL normattiva.it della norma risponda con HTTP 200.
+    - Prima esegue validazione strutturale U (urn:nir:stato: obbligatorio).
+    - HEAD request, timeout 8s, NO follow redirect (redirects = errori su normattiva.it).
     - Fail open per errori rete / server (non scarta norme reali per problemi transitori).
-    - 404 → scarta definitivamente.
+    - Qualsiasi status != 200 → scarta (inclusi 301/302 che su normattiva.it indicano
+      che la norma non esiste nella forma richiesta).
     """
     url = (norma.get("url_normattiva") or "").strip()
     if not url:
         print(f"[PERSIST] URL_CHECK: {norma.get('id')!r} senza url_normattiva, skip check", flush=True)
         return True
 
+    # Validazione strutturale pre-HEAD (Opzione U)
+    if not _is_valid_url_normattiva(url):
+        print(
+            f"[PERSIST] URL_CHECK: {norma.get('id')!r} scartata per URL non valido strutturalmente",
+            flush=True,
+        )
+        return False
+
     try:
+        # NO follow redirect: opener senza redirect handler
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "Mozilla/5.0 (compatible; NormativaBot/1.0)"},
             method="HEAD",
         )
+        # Usiamo urlopen con timeout; se normattiva.it fa redirect, viene
+        # seguito di default — ma il check strutturale sopra garantisce che
+        # solo URL canonici arrivino qui. Accettiamo solo 200.
         with urllib.request.urlopen(req, timeout=8) as resp:
             status = resp.status
-        ok = status in (200, 301, 302)
-        if ok:
-            print(f"[PERSIST] URL_CHECK OK: {norma.get('id')!r} → HTTP {status}", flush=True)
+        if status == 200:
+            print(f"[PERSIST] URL_CHECK OK: {norma.get('id')!r} → HTTP 200", flush=True)
+            return True
         else:
             print(
                 f"[PERSIST] URL_CHECK FAIL: {norma.get('id')!r} → HTTP {status} "
-                f"| url={url[:80]!r} | norma scartata",
+                f"(solo 200 accettato) | url={url[:80]!r} | norma scartata",
                 flush=True,
             )
-        return ok
+            return False
     except urllib.error.HTTPError as exc:
         status = exc.code
         if status == 404:
@@ -446,7 +491,7 @@ def discover_missing_norme(
     tipo_atto: str,
     oggetto: str,
     pertinent_results: list,
-) -> list[dict]:
+) -> list:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return []
@@ -470,6 +515,7 @@ def discover_missing_norme(
         "- L. 328/2000 — Servizi sociali",
         "- L. 104/1992 — Assistenza disabili",
         "- D.P.C.M. 159/2013 — ISEE",
+        "- L. 135/2012 — Spending Review (D.L. 6 luglio 2012, n. 95)",
     ]
     already_str = "\n".join(already_covered + local_db_refs)
 
@@ -502,7 +548,10 @@ def discover_missing_norme(
         "- descrizione: 2-3 frasi che spiegano cosa disciplina e perché è rilevante per questa query\n"
         "- articoli_chiave: lista di 3-5 articoli rilevanti con descrizione\n"
         "- tags: lista di 5-10 tag lowercase rilevanti\n"
-        "- url_normattiva: URL su normattiva.it\n"
+        "- url_normattiva: URL CANONICO su normattiva.it nel formato:\n"
+        "  https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:<tipo>:<data>;<numero>\n"
+        "  dove <tipo> è il tipo atto (decreto.legislativo, legge, ecc.)\n"
+        "  OBBLIGATORIO: l'URL deve contenere 'urn:nir:stato:' — non usare URL generici o codificati\n"
         "- ai_motivation: 1-2 frasi su perché questa norma è pertinente per la query specifica\n\n"
         "Rispondi SOLO con JSON: {\"discovered\": [<lista schede>]}"
     )
@@ -532,7 +581,7 @@ def discover_missing_norme(
         return []
 
 
-def persist_discovered_norme(discovered: list[dict], query_text: str = "") -> list[dict]:
+def persist_discovered_norme(discovered: list, query_text: str = "") -> list:
     """
     Per ogni norma scoperta da Groq esegue (in ordine):
     1. Normalizzazione ID
@@ -540,9 +589,10 @@ def persist_discovered_norme(discovered: list[dict], query_text: str = "") -> li
     3. Check blocklist
     4. Validazione E — strict ID/estremi/titolo (anti-allucinazione strutturale)
     5. Normalizzazione URL normattiva
-    6. Validazione D — similarity coseno query↔descrizione norma
-    7. Verifica HTTP esistenza su normattiva.it
-    8. Generazione embedding + insert Supabase
+    6. Validazione U — check strutturale URL (urn:nir:stato: obbligatorio)
+    7. Validazione D — similarity coseno query↔descrizione norma
+    8. Verifica HTTP esistenza su normattiva.it (solo HTTP 200)
+    9. Generazione embedding + insert Supabase
     """
     from api.utils.supabase_search import get_embedding, insert_norma_to_supabase
 
@@ -579,7 +629,15 @@ def persist_discovered_norme(discovered: list[dict], query_text: str = "") -> li
         norma["url_normattiva"] = _normalize_url_normattiva(norma)
         norma.setdefault("url_ricerca", norma["url_normattiva"])
 
-        # 6. Validazione D (similarity)
+        # 6. Validazione U — strutturale URL (pre-HEAD, blocca base64 e URL generici)
+        if not _is_valid_url_normattiva(norma["url_normattiva"]):
+            print(
+                f"[PERSIST] {norma['id']!r} scartata: URL non supera validazione strutturale U",
+                flush=True,
+            )
+            continue
+
+        # 7. Validazione D (similarity)
         if query_embedding and not _check_discover_similarity(norma, query_embedding):
             print(
                 f"[PERSIST] {norma['id']!r} scartata: similarity < {DISCOVER_MIN_SIMILARITY}",
@@ -587,15 +645,15 @@ def persist_discovered_norme(discovered: list[dict], query_text: str = "") -> li
             )
             continue
 
-        # 7. Verifica HTTP
+        # 8. Verifica HTTP (solo 200)
         if not _check_url_normattiva_exists(norma):
             print(
-                f"[PERSIST] {norma['id']!r} scartata: URL non trovato su normattiva.it",
+                f"[PERSIST] {norma['id']!r} scartata: URL non risponde HTTP 200 su normattiva.it",
                 flush=True,
             )
             continue
 
-        # 8. Embedding + insert Supabase
+        # 9. Embedding + insert Supabase
         embed_text = " ".join(filter(None, [
             norma.get("titolo", ""),
             norma.get("estremi", ""),
