@@ -450,7 +450,7 @@ def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE, budget: float
     top = candidates[:k]
     for n in candidates:
         n.setdefault("text_vigente", "")
-        n.setdefault("ai_motivation", "")  # garantisce il campo anche per candidati da Supabase
+        n.setdefault("ai_motivation", "")
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=k) as executor:
         future_to_norma = {executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n for n in top}
@@ -778,7 +778,7 @@ def _run_diagnostics(full_query: str) -> dict:
     return diag
 
 
-class Handler(BaseHTTPRequestHandler):
+class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -874,7 +874,3 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-
-
-# Alias top-level esplicito richiesto dal parser statico di Vercel CLI 54+
-handler = Handler
