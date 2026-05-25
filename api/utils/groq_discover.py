@@ -67,6 +67,20 @@ _LOCAL_DB_NORME_IDS = {
     "circ_agid_cloud_2021", "l_328_2000", "dpcm_159_2013", "l_104_1992",
 }
 
+# Mappa: prefisso degli estremi -> tipo corretto nell'URN normattiva.it
+_ESTREMI_TO_URN_TYPE = [
+    (r"d\.?lgs\.?",           "decreto.legislativo"),
+    (r"decreto legislativo",   "decreto.legislativo"),
+    (r"d\.?p\.?r\.?",         "decreto.del.presidente.della.repubblica"),
+    (r"decreto del presidente della repubblica", "decreto.del.presidente.della.repubblica"),
+    (r"d\.?p\.?c\.?m\.?",    "decreto.del.presidente.del.consiglio.dei.ministri"),
+    (r"decreto del presidente del consiglio",    "decreto.del.presidente.del.consiglio.dei.ministri"),
+    (r"d\.?m\.?",             "decreto.ministeriale"),
+    (r"decreto ministeriale",  "decreto.ministeriale"),
+    (r"l\.",                   "legge"),
+    (r"legge",                 "legge"),
+]
+
 
 def _extract_json(raw: str) -> dict:
     try:
@@ -97,7 +111,6 @@ def _is_duplicate_of_local_db(norma: dict) -> bool:
         return True
 
     estremi = (norma.get("estremi") or "").lower()
-    # Estrae tutti i numeri dagli estremi
     numeri = re.findall(r"\b(\d{2,4})\b", estremi)
     anni = [n for n in numeri if 1980 <= int(n) <= 2030]
     numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
@@ -107,6 +120,38 @@ def _is_duplicate_of_local_db(norma: dict) -> bool:
             return True
 
     return False
+
+
+def _normalize_url_normattiva(norma: dict) -> str:
+    """
+    Corregge il tipo atto nell'URL normattiva generato da Groq.
+    Deriva il tipo corretto dagli estremi della norma e lo sostituisce
+    nell'URL se risulta errato (es. decreto.legge -> decreto.legislativo).
+    """
+    url = (norma.get("url_normattiva") or "").strip()
+    estremi = (norma.get("estremi") or "").lower().strip()
+    if not url or not estremi:
+        return url
+
+    # Determina il tipo URN corretto dagli estremi
+    urn_type_correct = None
+    for pattern, urn_type in _ESTREMI_TO_URN_TYPE:
+        if re.match(pattern, estremi, re.IGNORECASE):
+            urn_type_correct = urn_type
+            break
+
+    if not urn_type_correct:
+        return url
+
+    # Sostituisce il segmento tipo nell'URN (tra :stato: e :YYYY)
+    corrected = re.sub(
+        r"(urn:nir:stato:)[^:]+(:)",
+        lambda m: f"{m.group(1)}{urn_type_correct}{m.group(2)}",
+        url,
+    )
+    if corrected != url:
+        print(f"[PERSIST] URL corretto: {url!r} -> {corrected!r}", flush=True)
+    return corrected
 
 
 def filter_pertinent(results: list) -> list:
@@ -145,7 +190,6 @@ def discover_missing_norme(
     already_covered = [
         f"- {r['estremi']} — {r['titolo']}" for r in pertinent_results
     ]
-    # Aggiungi anche le norme del DB locale per evitare che Groq le reinventi
     local_db_refs = [
         "- D.Lgs. 36/2023 — Codice dei contratti pubblici",
         "- D.Lgs. 82/2005 — CAD",
@@ -183,11 +227,12 @@ def discover_missing_norme(
         "Per ogni norma mancante reale, genera:\n"
         "- id: stringa snake_case univoca (es. dpr_380_2001)\n"
         "- titolo: titolo breve ufficiale\n"
-        "- estremi: riferimento normativo completo (es. D.P.R. 6 giugno 2001, n. 380)\n"
+        "- estremi: riferimento normativo completo e preciso (es. D.P.R. 6 giugno 2001, n. 380)\n"
         "- descrizione: 2-3 frasi che spiegano cosa disciplina e perché è rilevante per questa query\n"
         "- articoli_chiave: lista di 3-5 articoli rilevanti con descrizione (es. 'art. 10 — contenuto del PRG')\n"
         "- tags: lista di 5-10 tag lowercase rilevanti\n"
         "- url_normattiva: URL su normattiva.it (formato: https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:<tipo>:<data>;<numero>)\n"
+        "  Usa il tipo corretto: decreto.legislativo per D.Lgs., decreto.del.presidente.della.repubblica per D.P.R., legge per L., decreto.ministeriale per D.M.\n"
         "- ai_motivation: 1-2 frasi su perché questa norma è pertinente per la query specifica\n\n"
         "Rispondi SOLO con JSON: {\"discovered\": [<lista schede>]}"
     )
@@ -221,6 +266,7 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
     """
     Per ogni norma scoperta da Groq:
     - Valida che non sia un duplicato del DB locale
+    - Normalizza l'URL normattiva
     - Genera l'embedding via Supabase Edge Function
     - Inserisce nel DB Supabase
     - Restituisce la lista delle norme effettivamente persisted (con score e ai_motivation)
@@ -237,6 +283,10 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
         if _is_duplicate_of_local_db(norma):
             print(f"[PERSIST] {norma['id']!r} è duplicato di una norma già nel DB locale, skip", flush=True)
             continue
+
+        # Normalizza URL normattiva (corregge tipo atto errato)
+        norma["url_normattiva"] = _normalize_url_normattiva(norma)
+        norma.setdefault("url_ricerca", norma["url_normattiva"])
 
         # Testo per embedding: titolo + descrizione + articoli chiave
         embed_text = " ".join(filter(None, [
@@ -255,13 +305,11 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
             else:
                 print(f"[PERSIST] insert fallito per {norma['id']!r}", flush=True)
 
-        # Aggiungiamo ai risultati in ogni caso (anche senza embedding)
         norma_result = norma.copy()
         norma_result["score"] = 95
         norma_result["text_vigente"] = ""
         norma_result["text_vigente_disponibile"] = False
         norma_result.setdefault("ai_motivation", "")
         norma_result.setdefault("convenzione_only", False)
-        norma_result.setdefault("url_ricerca", norma.get("url_normattiva", ""))
         persisted.append(norma_result)
     return persisted
