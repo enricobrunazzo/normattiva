@@ -337,7 +337,7 @@ SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 |---|---|
 | Frontend | HTML/CSS/JS vanilla (nessun framework) |
 | Backend | Python 3.x — stdlib pura (`http.server`, `urllib`, `json`, `re`) |
-| AI | Groq API — modelli `openai/gpt-oss-20b` (expand) e `openai/gpt-oss-120b` (rank/discover) |
+| AI | Groq API — modelli `llama-3.1-8b-instant` (expand) e `llama-3.3-70b-versatile` (rank/discover) |
 | Vector DB | Supabase (pgvector) + Edge Function embed (Deno) |
 | Hosting | Vercel (Serverless Functions + Static) |
 | Dipendenze Python | nessuna (zero `pip install`) |
@@ -359,6 +359,16 @@ SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 | `[PERSIST] URL corretto: '...' -> '...'` | Normalizzazione URL tipo atto |
 | `[PERSIST] 'id' inserita in Supabase` | Nuova norma salvata nel vector DB |
 | `[NORMATTV_PARALLEL] done \| hits=N \| elapsed=X.Xs` | Fetch testo vigente completato |
+
+---
+
+## Changelog
+
+### 2026-05-25
+- **fix**: corretti i model ID Groq in `api/search.py`:
+  - `MODEL_EXPAND`: `openai/gpt-oss-20b` → `llama-3.1-8b-instant`
+  - `MODEL_RANK`: `openai/gpt-oss-120b` → `llama-3.3-70b-versatile`
+- **fix**: `_fetch_norme_parallel` inizializza ora `ai_motivation = ""` su tutti i candidati (inclusi quelli da Supabase), evitando campi mancanti nella response JSON in caso di errore Groq
 
 ---
 
