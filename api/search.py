@@ -42,8 +42,9 @@ NEGO_THRESHOLD   = 215_000
 GROQ_MAX_CANDIDATES = 12
 MIN_SCORE_FOR_GROQ  = 2
 
-MODEL_EXPAND = "openai/gpt-oss-20b"
-MODEL_RANK   = "openai/gpt-oss-120b"
+# Modelli Groq validi (https://console.groq.com/docs/models)
+MODEL_EXPAND = "llama-3.1-8b-instant"      # veloce, per espansione tag
+MODEL_RANK   = "llama-3.3-70b-versatile"   # potente, per ranking e motivazioni AI
 
 _GROQ_HEADERS = {
     "Content-Type":    "application/json",
@@ -428,6 +429,7 @@ def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE, budget: float
     top = candidates[:k]
     for n in candidates:
         n.setdefault("text_vigente", "")
+        n.setdefault("ai_motivation", "")  # garantisce il campo anche per candidati da Supabase
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=k) as executor:
         future_to_norma = {executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n for n in top}
@@ -545,7 +547,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
         return candidates
     groq_candidates = candidates[:GROQ_MAX_CANDIDATES]
     remaining = candidates[GROQ_MAX_CANDIDATES:]
-    # Indice locale per lookup rapido tra i candidati (include norme Supabase non nel DB locale)
     candidates_by_id = {c["id"]: c for c in groq_candidates}
     try:
         norme_lines = []
@@ -583,7 +584,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
         reranked = []
         for item in ranked_list:
             nid = item["id"]
-            # Cerca prima tra i candidati (include norme Supabase), poi fallback al DB locale
             norma = candidates_by_id.get(nid) or NORME_BY_ID.get(nid)
             if norma is None:
                 print(f"[GROQ RANK] ID {nid!r} non trovato nei candidati n\u00e9 nel DB locale, skip", flush=True)
@@ -615,7 +615,6 @@ def _run_diagnostics(full_query: str) -> dict:
         diag["embed_result"] = "SKIP (env var mancanti)"
         return diag
 
-    # Testa Edge Function embed
     edge_url = f"{supa_url}/functions/v1/embed"
     try:
         payload = json.dumps({"input": full_query[:200]}).encode()
@@ -638,7 +637,6 @@ def _run_diagnostics(full_query: str) -> dict:
         diag["embed_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
         diag["embed_ok"] = False
 
-    # Testa RPC search_norme_by_embedding (solo se embed ok)
     if diag.get("embed_ok") and diag.get("embed_dim", 0) > 0:
         emb_list = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
         vector_str = "[" + ",".join(str(x) for x in emb_list) + "]"
@@ -689,18 +687,15 @@ class handler(BaseHTTPRequestHandler):
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        # Diagnostica (solo se ?debug=true)
         diagnostics = None
         if debug_mode:
             full_query_diag = f"{testo} {oggetto}".strip()
             diagnostics = _run_diagnostics(full_query_diag)
             print(f"[DIAG] {json.dumps(diagnostics)}", flush=True)
 
-        # 1. Espansione tag via Groq
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
         full_query = f"{testo} {oggetto}".strip()
 
-        # 2. Ricerca candidati (Supabase vector o fallback tag)
         candidates = supabase_vector_search(full_query, convenzione=convenzione)
         source = "supabase"
         if not candidates:
@@ -708,17 +703,13 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        # 3. Fetch testo vigente in parallelo
         _fetch_norme_parallel(candidates)
 
-        # 4. Ranking Groq: restituisce SOLO le norme che ritiene pertinenti
         ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
-        # 5. Filtro di sicurezza: rimuovi eventuali residui non pertinenti via ai_motivation
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
 
-        # 6. Scopri norme mancanti via Groq anche quando Supabase ha gi\u00e0 risultati
         new_norme_added: list[str] = []
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
