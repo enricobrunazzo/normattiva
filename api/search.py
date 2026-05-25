@@ -2,21 +2,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
-from typing import Optional
 import json
 import os
 import re
-import sys
 import time
 import urllib.parse
 import urllib.request
-
-# ── sys.path injection: permette import da api/utils sia in locale che su Vercel ──────────────────────────
-_API_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT_DIR = os.path.dirname(_API_DIR)
-for _p in (_ROOT_DIR, _API_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
 from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
@@ -370,7 +361,7 @@ STOP_WORDS = {"il","lo","la","i","gli","le","un","uno","una","di","del","della",
 _ALL_VALID_TAGS = sorted(set(tag for norma in NORMATIVE_DB for tag in norma["tags"]))
 
 
-def _parse_importo(importo_str: str) -> Optional[float]:
+def _parse_importo(importo_str: str) -> float | None:
     try:
         return float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
     except (ValueError, AttributeError):
@@ -435,8 +426,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\\'']?[^\"\\']*(?:atto|norma|testo|corpo|content)[^\"\\']*[\"\\'']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\\'']?main[\"\\'']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -458,7 +449,7 @@ def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE, budget: float
     top = candidates[:k]
     for n in candidates:
         n.setdefault("text_vigente", "")
-        n.setdefault("ai_motivation", "")
+        n.setdefault("ai_motivation", "")  # garantisce il campo anche per candidati da Supabase
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=k) as executor:
         future_to_norma = {executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n for n in top}
@@ -489,7 +480,7 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
-def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list:
+def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return []
@@ -587,7 +578,7 @@ def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: boo
     return filtered
 
 
-def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: Optional[list] = None) -> list:
+def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
     matched: dict = {}
 
     def _add(nid: str, score: int = 1) -> None:
@@ -828,10 +819,11 @@ class handler(BaseHTTPRequestHandler):
 
         results = _inject_cig_post_filter(results, importo, convenzione)
 
-        new_norme_added: list = []
+        new_norme_added: list[str] = []
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
+                # fix: passa query_text per abilitare similarity check D in persist_discovered_norme
                 persisted = persist_discovered_norme(discovered, query_text=testo)
                 existing_ids = {r.get("id") for r in results}
                 deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
@@ -884,7 +876,4 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-# Alias per compatibilità con il parser AST statico di Vercel CLI 54+ (builds legacy).
-# Il runtime usa `class handler` (BaseHTTPRequestHandler), ma il CLI cerca `app` come
-# simbolo top-level. Questo alias soddisfa entrambi senza modificare la logica.
-app = handler
+handler = handler
