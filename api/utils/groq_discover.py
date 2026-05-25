@@ -35,6 +35,15 @@ _NON_PERTINENCE_SIGNALS = [
     "non tratta",
     "non copre",
     "non concerne",
+    # Segnali che indicano pertinenza solo indiretta (PA-fornitore, non procedimento interno)
+    "solo se",
+    "solo qualora",
+    "eventualmente applicabile",
+    "applicabile solo in presenza di",
+    "non direttamente applicabile",
+    "applicabile esclusivamente ai fornitori",
+    "riguarda i fornitori",
+    "disciplina i fornitori",
 ]
 
 # Norme già presenti nel DB locale: (numero, anno) estratti dagli estremi
@@ -81,6 +90,21 @@ _ESTREMI_TO_URN_TYPE = [
     (r"legge",                 "legge"),
 ]
 
+# Mappa: prefisso estremi -> prefisso ID snake_case canonico
+_ESTREMI_TO_ID_PREFIX = [
+    (r"d\.?lgs\.?",            "dlgs"),
+    (r"decreto legislativo",    "dlgs"),
+    (r"d\.?p\.?r\.?",          "dpr"),
+    (r"decreto del presidente della repubblica", "dpr"),
+    (r"d\.?p\.?c\.?m\.?",     "dpcm"),
+    (r"decreto del presidente del consiglio",    "dpcm"),
+    (r"d\.?m\.?",              "dm"),
+    (r"decreto ministeriale",   "dm"),
+    (r"l\.",                    "l"),
+    (r"legge",                  "l"),
+    (r"d\.?p\.?",               "dp"),
+]
+
 
 def _extract_json(raw: str) -> dict:
     try:
@@ -99,11 +123,45 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
+def _normalize_id(norma: dict) -> str:
+    """
+    Normalizza l'ID della norma generata da Groq per renderlo coerente
+    con la convenzione del DB locale: prefisso_numero_anno, tutto lowercase,
+    senza separatori multipli (es. d_lgs_42_2004 -> dlgs_42_2004).
+    """
+    nid = (norma.get("id") or "").strip().lower()
+    estremi = (norma.get("estremi") or "").lower().strip()
+
+    # Determina il prefisso canonico dagli estremi
+    canonical_prefix = None
+    for pattern, prefix in _ESTREMI_TO_ID_PREFIX:
+        if re.match(pattern, estremi, re.IGNORECASE):
+            canonical_prefix = prefix
+            break
+
+    if not canonical_prefix:
+        return nid
+
+    # Estrae anno e numero dagli estremi
+    numeri = re.findall(r"\b(\d{2,4})\b", estremi)
+    anni = [n for n in numeri if 1980 <= int(n) <= 2030]
+    numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
+
+    if not numeri_norma or not anni:
+        return nid
+
+    canonical_id = f"{canonical_prefix}_{numeri_norma[0]}_{anni[0]}"
+
+    if canonical_id != nid:
+        print(f"[PERSIST] ID normalizzato: {nid!r} -> {canonical_id!r}", flush=True)
+    return canonical_id
+
+
 def _is_duplicate_of_local_db(norma: dict) -> bool:
     """
     Controlla se la norma generata da Groq è un duplicato di una norma
     già presente nel DB locale, confrontando:
-    1. L'ID esatto
+    1. L'ID esatto (anche dopo normalizzazione)
     2. Numero + anno estratti dagli estremi
     """
     nid = (norma.get("id") or "").strip().lower()
@@ -133,7 +191,6 @@ def _normalize_url_normattiva(norma: dict) -> str:
     if not url or not estremi:
         return url
 
-    # Determina il tipo URN corretto dagli estremi
     urn_type_correct = None
     for pattern, urn_type in _ESTREMI_TO_URN_TYPE:
         if re.match(pattern, estremi, re.IGNORECASE):
@@ -143,7 +200,6 @@ def _normalize_url_normattiva(norma: dict) -> str:
     if not urn_type_correct:
         return url
 
-    # Sostituisce il segmento tipo nell'URN (tra :stato: e :YYYY)
     corrected = re.sub(
         r"(urn:nir:stato:)[^:]+(:)",
         lambda m: f"{m.group(1)}{urn_type_correct}{m.group(2)}",
@@ -223,9 +279,16 @@ def discover_missing_norme(
         "1. Valuta se esistono norme italiane VIGENTI rilevanti per questa query che NON sono già coperte.\n"
         "2. Se esistono, genera una scheda per CIASCUNA norma mancante (massimo 3).\n"
         "3. Se le norme già coperte sono sufficienti, restituisci discovered=[] (lista vuota).\n"
-        "4. NON generare norme che non esistono realmente: verifica che ID, estremi e titolo corrispondano a una norma italiana vigente reale.\n\n"
+        "4. NON generare norme che non esistono realmente: verifica che ID, estremi e titolo corrispondano a una norma italiana vigente reale.\n"
+        "5. NON includere norme che disciplinano esclusivamente i rapporti tra PA e fornitori privati se la query riguarda un procedimento interno o autorizzativo della PA.\n\n"
+        "Convenzione ID: usa sempre il formato snake_case compatto senza trattini interni al prefisso:\n"
+        "  D.Lgs. -> dlgs_<numero>_<anno>  (es. dlgs_42_2004)\n"
+        "  D.P.R. -> dpr_<numero>_<anno>   (es. dpr_380_2001)\n"
+        "  D.P.C.M. -> dpcm_<numero>_<anno>\n"
+        "  D.M. -> dm_<numero>_<anno>\n"
+        "  L. -> l_<numero>_<anno>          (es. l_241_1990)\n\n"
         "Per ogni norma mancante reale, genera:\n"
-        "- id: stringa snake_case univoca (es. dpr_380_2001)\n"
+        "- id: stringa snake_case univoca secondo la convenzione sopra\n"
         "- titolo: titolo breve ufficiale\n"
         "- estremi: riferimento normativo completo e preciso (es. D.P.R. 6 giugno 2001, n. 380)\n"
         "- descrizione: 2-3 frasi che spiegano cosa disciplina e perché è rilevante per questa query\n"
@@ -265,6 +328,7 @@ def discover_missing_norme(
 def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
     """
     Per ogni norma scoperta da Groq:
+    - Normalizza l'ID secondo la convenzione del DB locale
     - Valida che non sia un duplicato del DB locale
     - Normalizza l'URL normattiva
     - Genera l'embedding via Supabase Edge Function
@@ -278,6 +342,9 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
         if not norma.get("id") or not norma.get("titolo"):
             print(f"[PERSIST] scheda senza id o titolo, skip", flush=True)
             continue
+
+        # Normalizza ID secondo convenzione del DB locale
+        norma["id"] = _normalize_id(norma)
 
         # Validazione: scarta se è un duplicato del DB locale
         if _is_duplicate_of_local_db(norma):
