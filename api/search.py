@@ -1,4 +1,4 @@
-"""Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama."""
+"""Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama. v2"""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
@@ -350,6 +350,11 @@ SEMANTIC_MAP = {
     "nucleo": ["nucleo-familiare", "isee", "isee-sociosanitario", "servizi-sociali"],
     "familiare": ["nucleo-familiare", "isee", "servizi-sociali"],
     "assistente": ["assistente-sociale", "servizi-sociali", "sociale"],
+    "esterno": ["consulenza", "incarico", "personale"],
+    "consulente": ["consulenza", "incarico", "personale"],
+    "videosorveglianza": ["privacy", "dati", "gdpr", "trattamento", "personali"],
+    "telecamere": ["privacy", "dati", "gdpr", "trattamento"],
+    "sorveglianza": ["privacy", "dati", "gdpr", "trattamento"],
 }
 
 STOP_WORDS = {"il","lo","la","i","gli","le","un","uno","una","di","del","della","degli","dei","delle","a","al","alla","ai","agli","alle","da","dal","dalla","dai","dagli","dalle","in","nel","nella","nei","negli","nelle","con","su","per","tra","fra","che","chi","cui","non","ma","se","ho","ha","hanno","devo","deve","voglio","fare","sono","e","o","come","quando","dove","questo","questa","questi","queste","also","such"}
@@ -421,8 +426,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=["\'']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\'']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=["\'']?main["\'']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -507,11 +512,7 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
 
 
 def _inject_dlgs50_pre_rank(candidates: list, testo: str, oggetto: str) -> list:
-    """Bug #2 fix: inietta dlgs_50_2016 nei candidati se query è su proroga/storico.
-
-    Viene chiamata PRIMA di _groq_rank, così Groq la vede e la include nel ranking
-    con motivazione appropriata.
-    """
+    """Bug #2 fix: inietta dlgs_50_2016 nei candidati se query è su proroga/storico."""
     if not _is_proroga_query(testo, oggetto):
         return candidates
     existing_ids = {c["id"] for c in candidates}
@@ -524,7 +525,6 @@ def _inject_dlgs50_pre_rank(candidates: list, testo: str, oggetto: str) -> list:
     entry["score"] = 10
     entry.setdefault("text_vigente", "")
     entry.setdefault("ai_motivation", "")
-    # Inserisci subito dopo dlgs_36_2023 se presente, altrimenti in testa
     insert_pos = 0
     for i, c in enumerate(candidates):
         if c["id"] == "dlgs_36_2023":
@@ -536,12 +536,7 @@ def _inject_dlgs50_pre_rank(candidates: list, testo: str, oggetto: str) -> list:
 
 
 def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> list:
-    """Bug #1 fix: inietta l_136_2010 DOPO filter_pertinent solo se importo > SEMI_THRESHOLD.
-
-    Posizionamento: subito dopo l'ultima norma contrattuale (dlgs_36_2023 o dlgs_50_2016),
-    o in coda se non trovata. Usa ai_motivation predefinita per non richiedere ulteriori
-    chiamate Groq.
-    """
+    """Bug #1 fix: inietta l_136_2010 DOPO filter_pertinent solo se importo > SEMI_THRESHOLD."""
     val = _parse_importo(importo)
     if val is None or val <= SEMI_THRESHOLD or convenzione:
         return results
@@ -573,11 +568,7 @@ def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> l
 
 
 def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: bool) -> list:
-    """Bug #1 fix: rimuove l_136_2010 dai risultati di Groq se importo <= SEMI_THRESHOLD.
-
-    Groq può includere l_136_2010 autonomamente anche sotto soglia, con motivazione
-    generica e fuorviante. Sotto i 5.000€ il CIG non è obbligatorio: rimuoviamo la norma.
-    """
+    """Bug #1 fix: rimuove l_136_2010 dai risultati di Groq se importo <= SEMI_THRESHOLD."""
     val = _parse_importo(importo)
     if val is None or val > SEMI_THRESHOLD or convenzione:
         return results
@@ -645,7 +636,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
     remaining = candidates[GROQ_MAX_CANDIDATES:]
     candidates_by_id = {c["id"]: c for c in groq_candidates}
 
-    # Bug #2: contestualizza il prompt se la query riguarda proroga/storico
     proroga_hint = ""
     if _is_proroga_query(testo, oggetto):
         proroga_hint = (
@@ -816,20 +806,17 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        # Bug #2 fix: boost dlgs_50_2016 pre-rank se query di proroga/storico
         candidates = _inject_dlgs50_pre_rank(candidates, testo, oggetto)
 
         _fetch_norme_parallel(candidates)
 
         ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
-        # Bug #1 fix: rimuovi l_136_2010 se importo <= SEMI_THRESHOLD (Groq la inserisce erroneamente)
         ranked = _remove_cig_if_below_threshold(ranked, importo, convenzione)
 
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
 
-        # Bug #1 fix (parte 2): CIG boost post filter_pertinent — Groq non può eliminarlo
         results = _inject_cig_post_filter(results, importo, convenzione)
 
         new_norme_added: list[str] = []
