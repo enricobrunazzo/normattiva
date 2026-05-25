@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
+from typing import Optional
 import json
 import os
 import re
@@ -361,7 +362,7 @@ STOP_WORDS = {"il","lo","la","i","gli","le","un","uno","una","di","del","della",
 _ALL_VALID_TAGS = sorted(set(tag for norma in NORMATIVE_DB for tag in norma["tags"]))
 
 
-def _parse_importo(importo_str: str) -> float | None:
+def _parse_importo(importo_str: str) -> Optional[float]:
     try:
         return float(importo_str.replace(".", "").replace(",", ".").replace("€", "").strip())
     except (ValueError, AttributeError):
@@ -426,8 +427,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -480,7 +481,7 @@ def _extract_json(raw: str) -> dict:
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
-def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
+def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return []
@@ -578,7 +579,7 @@ def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: boo
     return filtered
 
 
-def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
+def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: Optional[list] = None) -> list:
     matched: dict = {}
 
     def _add(nid: str, score: int = 1) -> None:
@@ -819,7 +820,7 @@ class handler(BaseHTTPRequestHandler):
 
         results = _inject_cig_post_filter(results, importo, convenzione)
 
-        new_norme_added: list[str] = []
+        new_norme_added: list = []
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
