@@ -5,6 +5,13 @@ Dato un testo di query e i candidati già rankati da Groq, questo modulo:
 1. Filtra i risultati non pertinenti (ai_motivation contiene segnali negativi)
 2. Chiede a Groq se mancano norme rilevanti per il dominio della query
 3. Se mancano, le genera come schede strutturate e le inserisce in Supabase
+
+Validazione anti-allucinazione (pipeline persist_discovered_norme):
+  E — strict ID/estremi check: numero E anno dell'ID devono matchare esattamente gli estremi;
+      il numero di norma NON può essere solo nell'anno (ex: l_19_2019 con n.56/2019 → scartata);
+      titolo non generico (no titoli che iniziano con parole vuote senza numero legge)
+  D — similarity check: embedding coseno tra testo query e descrizione norma;
+      se similarity < DISCOVER_MIN_SIMILARITY → norma scartata come irrilevante
 """
 
 import json
@@ -23,6 +30,29 @@ _GROQ_HEADERS = {
 }
 
 MODEL_RANK = "llama-3.3-70b-versatile"  # fix: era openai/gpt-oss-120b (non più disponibile su Groq)
+
+# ── Soglia D: similarity minima tra query e descrizione norma scoperta
+# Valore empirico: le norme pertinenti hanno similarity ≥ 0.75 con la query;
+# norme generiche/irrilevanti scendono sotto 0.70.
+DISCOVER_MIN_SIMILARITY = 0.72
+
+# ── Titoli generici che Groq usa per norme inventate (Opzione E)
+# Se il titolo inizia con una di queste parole e NON contiene un numero di legge,
+# la norma viene considerata allucinazione.
+_GENERIC_TITLE_PREFIXES = (
+    "disposizioni per",
+    "disposizioni in materia",
+    "disposizioni recanti",
+    "norme per",
+    "norme in materia",
+    "regolamento per",
+    "regolamento recante",
+    "attuazione della direttiva",
+    "attuazione del regolamento",
+    "misure per",
+    "misure urgenti",
+    "misure di",
+)
 
 # Segnali negativi nell'ai_motivation che indicano NON pertinenza.
 _NON_PERTINENCE_SIGNALS = [
@@ -77,6 +107,7 @@ _LOCAL_DB_NORME_IDS = {
 # ── Blocklist: norme da non inserire mai in Supabase (numero, anno, motivo)
 _BLOCKLIST_ESTREMI = [
     ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
+    ("117", "2017", "D.Lgs. 117/2017 = Codice Terzo Settore, non pertinente per appalti ordinari PA"),
 ]
 
 # Mappa: prefisso estremi -> tipo URN normattiva.it
@@ -186,61 +217,153 @@ def _is_blocklisted(norma: dict) -> bool:
 
 def _is_valid_norma_italiana(norma: dict) -> bool:
     """
-    Valida coerenza interna: ID, estremi, titolo e descrizione non vuoti,
-    e numero/anno dell'ID presenti negli estremi.
+    Opzione E — Validazione stricta anti-allucinazione:
+    1. Campi obbligatori presenti
+    2. ID formato snake_case valido
+    3. Numero norma nell'ID deve matchare esattamente il numero negli estremi
+       (NON basta che sia nell'anno: l_19_2019 con n.56/2019 → FAIL)
+    4. Anno nell'ID deve matchare l'anno negli estremi
+    5. Titolo non generico senza numero di legge
+    6. Numero norma presente anche nella descrizione o nel titolo (doppio check)
     """
     nid = (norma.get("id") or "").strip().lower()
     estremi = (norma.get("estremi") or "").strip()
     descrizione = (norma.get("descrizione") or "").strip()
     titolo = (norma.get("titolo") or "").strip()
 
+    # 1. Campi obbligatori
     if not nid or not estremi or not descrizione or not titolo:
-        print(f"[PERSIST] VALIDATION: scheda incompleta (id={nid!r}), skip", flush=True)
+        print(f"[PERSIST] VALIDATION E1: scheda incompleta (id={nid!r}), skip", flush=True)
         return False
 
+    # 2. Formato ID
     if not re.match(r'^[a-z]+_\d{2,3}_\d{4}$', nid):
         if not re.match(r'^[a-z0-9_]+$', nid) or len(nid) < 8:
-            print(f"[PERSIST] VALIDATION: ID {nid!r} non rispetta il formato, skip", flush=True)
+            print(f"[PERSIST] VALIDATION E2: ID {nid!r} formato non valido, skip", flush=True)
             return False
 
+    # 3+4. Numero e anno: match ESATTO tra ID e estremi
     id_parts = nid.split("_")
     numeri_nel_id = [p for p in id_parts if p.isdigit() and len(p) <= 4]
     if numeri_nel_id:
-        numero_norma = numeri_nel_id[0]
-        anno_norma = numeri_nel_id[-1] if len(numeri_nel_id) > 1 else ""
+        numero_norma = numeri_nel_id[0]   # es. "19" in l_19_2019
+        anno_norma = numeri_nel_id[-1] if len(numeri_nel_id) > 1 else ""  # es. "2019"
         estremi_lower = estremi.lower()
-        if numero_norma not in estremi_lower:
-            print(
-                f"[PERSIST] VALIDATION: numero {numero_norma!r} dell'ID {nid!r} "
-                f"non trovato negli estremi {estremi!r}, skip",
-                flush=True,
-            )
-            return False
+
+        # Numero deve apparire come "n. <numero>" o ", <numero>" negli estremi
+        # Questo blocca l_19_2019 con estremi "L. 56/2019" dove 19 è solo parte dell'anno
+        numero_pattern = rf"(?:n\.\s*|,\s*){re.escape(numero_norma)}\b"
+        if not re.search(numero_pattern, estremi_lower):
+            # Fallback: numero come token standalone (non come parte di anno)
+            # Verifica che il numero sia un token autonomo e non contenuto nell'anno
+            all_tokens = re.findall(r"\b(\d{2,4})\b", estremi_lower)
+            anni_in_estremi = [t for t in all_tokens if 1980 <= int(t) <= 2030]
+            numeri_in_estremi = [t for t in all_tokens if int(t) not in range(1980, 2031)]
+            if numero_norma not in numeri_in_estremi:
+                print(
+                    f"[PERSIST] VALIDATION E3: numero {numero_norma!r} dell'ID {nid!r} "
+                    f"non trovato come numero di norma negli estremi {estremi!r}, skip",
+                    flush=True,
+                )
+                return False
+
         if anno_norma and anno_norma not in estremi_lower:
             print(
-                f"[PERSIST] VALIDATION: anno {anno_norma!r} dell'ID {nid!r} "
+                f"[PERSIST] VALIDATION E4: anno {anno_norma!r} dell'ID {nid!r} "
                 f"non trovato negli estremi {estremi!r}, skip",
                 flush=True,
             )
             return False
+
+        # 6. Numero norma presente anche in titolo o descrizione (doppio check anti-invenzione)
+        titolo_desc = f"{titolo} {descrizione}".lower()
+        if numero_norma not in titolo_desc and anno_norma not in titolo_desc:
+            print(
+                f"[PERSIST] VALIDATION E6: numero/anno dell'ID {nid!r} "
+                f"non trovati nel titolo né nella descrizione, skip",
+                flush=True,
+            )
+            return False
+
+    # 5. Titolo generico senza numero di legge
+    titolo_lower = titolo.lower().strip()
+    for prefix in _GENERIC_TITLE_PREFIXES:
+        if titolo_lower.startswith(prefix):
+            # Accetta solo se nel titolo c'è un numero di legge esplicito
+            if not re.search(r"\b\d{2,4}/\d{4}\b|n\.\s*\d{2,3}", titolo_lower):
+                print(
+                    f"[PERSIST] VALIDATION E5: titolo generico senza numero legge: "
+                    f"{titolo!r}, skip",
+                    flush=True,
+                )
+                return False
+            break
+
     return True
+
+
+def _cosine_similarity(v1: list, v2: list) -> float:
+    """Calcola similarity coseno tra due vettori (list of float)."""
+    dot = sum(a * b for a, b in zip(v1, v2))
+    norm1 = sum(a * a for a in v1) ** 0.5
+    norm2 = sum(b * b for b in v2) ** 0.5
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    return dot / (norm1 * norm2)
+
+
+def _check_discover_similarity(
+    norma: dict,
+    query_embedding: list,
+) -> bool:
+    """
+    Opzione D — Similarity check: calcola coseno tra embedding query e
+    embedding della descrizione norma scoperta.
+    Se similarity < DISCOVER_MIN_SIMILARITY → norma irrilevante, scarta.
+
+    Usa get_embedding() già disponibile in supabase_search.
+    Fail open se l'embedding fallisce (non blocca norme reali per errori rete).
+    """
+    from api.utils.supabase_search import get_embedding
+
+    if not query_embedding:
+        return True  # fail open: nessun embedding query disponibile
+
+    embed_text = " ".join(filter(None, [
+        norma.get("titolo", ""),
+        norma.get("estremi", ""),
+        norma.get("descrizione", ""),
+    ]))
+    norma_embedding = get_embedding(embed_text)
+    if norma_embedding is None:
+        print(
+            f"[PERSIST] SIMILARITY D: embedding fallito per {norma.get('id')!r} → fail open",
+            flush=True,
+        )
+        return True  # fail open
+
+    sim = _cosine_similarity(query_embedding, norma_embedding)
+    ok = sim >= DISCOVER_MIN_SIMILARITY
+    print(
+        f"[PERSIST] SIMILARITY D: {norma.get('id')!r} sim={sim:.4f} "
+        f"({'OK' if ok else 'SCARTATA threshold=' + str(DISCOVER_MIN_SIMILARITY)})",
+        flush=True,
+    )
+    return ok
 
 
 def _check_url_normattiva_exists(norma: dict) -> bool:
     """
     Verifica che l'URL normattiva.it della norma risponda con un codice HTTP
-    valido (200, 301, 302). Questo blocca l'inserimento di norme con URL
-    inventati da Groq che non esistono realmente su normattiva.it.
-
-    - Usa una HEAD request per minimizzare il traffico.
-    - Timeout 8s: abbastanza per normattiva.it (lento), non blocca il flusso.
-    - In caso di errore di rete, passa (fail open) per non bloccare norme reali
-      in caso di temporanea irraggiungibilità del sito.
+    valido (200, 301, 302).
+    - HEAD request, timeout 8s.
+    - Fail open per errori rete / server (non scarta norme reali per problemi transitori).
+    - 404 → scarta definitivamente.
     """
     url = (norma.get("url_normattiva") or "").strip()
     if not url:
         print(f"[PERSIST] URL_CHECK: {norma.get('id')!r} senza url_normattiva, skip check", flush=True)
-        return True  # nessun URL da verificare: lascia passare
+        return True
 
     try:
         req = urllib.request.Request(
@@ -262,7 +385,6 @@ def _check_url_normattiva_exists(norma: dict) -> bool:
         return ok
     except urllib.error.HTTPError as exc:
         status = exc.code
-        # 404 = norma non esiste su normattiva.it → scarta
         if status == 404:
             print(
                 f"[PERSIST] URL_CHECK 404: {norma.get('id')!r} non trovata su normattiva.it "
@@ -270,18 +392,14 @@ def _check_url_normattiva_exists(norma: dict) -> bool:
                 flush=True,
             )
             return False
-        # Altri codici HTTP (403, 500…): fail open per non scartare norme reali
         print(
-            f"[PERSIST] URL_CHECK HTTP {status}: {norma.get('id')!r} → fail open "
-            f"(non scartiamo per errori server)",
+            f"[PERSIST] URL_CHECK HTTP {status}: {norma.get('id')!r} → fail open",
             flush=True,
         )
         return True
     except Exception as exc:
-        # Timeout, DNS, connessione rifiutata: fail open
         print(
-            f"[PERSIST] URL_CHECK ERROR: {norma.get('id')!r} → {type(exc).__name__}: {exc} "
-            f"→ fail open",
+            f"[PERSIST] URL_CHECK ERROR: {norma.get('id')!r} → {type(exc).__name__}: {exc} → fail open",
             flush=True,
         )
         return True
@@ -367,22 +485,24 @@ def discover_missing_norme(
         "2. Se esistono, genera una scheda per CIASCUNA norma mancante (massimo 3).\n"
         "3. Se le norme già coperte sono sufficienti, restituisci discovered=[] (lista vuota).\n"
         "4. NON generare norme che non esistono realmente: verifica che ID, estremi e titolo corrispondano a una norma italiana vigente reale.\n"
-        "5. NON includere norme che disciplinano esclusivamente i rapporti tra PA e fornitori privati se la query riguarda un procedimento interno o autorizzativo della PA.\n\n"
-        "Convenzione ID: usa sempre il formato snake_case compatto senza trattini interni al prefisso:\n"
+        "5. NON includere norme che disciplinano esclusivamente i rapporti tra PA e fornitori privati se la query riguarda un procedimento interno o autorizzativo della PA.\n"
+        "6. NON includere norme generiche o di sistema (Codice Terzo Settore, Codice Civile, Codice della Strada) se non direttamente applicabili alla specifica esigenza PA.\n\n"
+        "Convenzione ID: usa sempre il formato snake_case compatto:\n"
         "  D.Lgs. -> dlgs_<numero>_<anno>  (es. dlgs_42_2004)\n"
         "  D.P.R. -> dpr_<numero>_<anno>   (es. dpr_380_2001)\n"
         "  D.P.C.M. -> dpcm_<numero>_<anno>\n"
         "  D.M. -> dm_<numero>_<anno>\n"
-        "  L. -> l_<numero>_<anno>          (es. l_241_1990)\n\n"
+        "  L. -> l_<numero>_<anno>          (es. l_241_1990)\n"
+        "IMPORTANTE: il <numero> nell'ID deve corrispondere ESATTAMENTE al numero della norma\n"
+        "negli estremi (es. L. 56/2019, n. 56 → ID l_56_2019, NON l_19_2019).\n\n"
         "Per ogni norma mancante reale, genera:\n"
-        "- id: stringa snake_case univoca secondo la convenzione sopra\n"
-        "- titolo: titolo breve ufficiale\n"
+        "- id: stringa snake_case secondo la convenzione sopra\n"
+        "- titolo: titolo breve ufficiale (includi il numero di legge nel titolo)\n"
         "- estremi: riferimento normativo completo e preciso (es. D.P.R. 6 giugno 2001, n. 380)\n"
         "- descrizione: 2-3 frasi che spiegano cosa disciplina e perché è rilevante per questa query\n"
-        "- articoli_chiave: lista di 3-5 articoli rilevanti con descrizione (es. 'art. 10 — contenuto del PRG')\n"
+        "- articoli_chiave: lista di 3-5 articoli rilevanti con descrizione\n"
         "- tags: lista di 5-10 tag lowercase rilevanti\n"
-        "- url_normattiva: URL su normattiva.it (formato: https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:<tipo>:<data>;<numero>)\n"
-        "  Usa il tipo corretto: decreto.legislativo per D.Lgs., decreto.del.presidente.della.repubblica per D.P.R., legge per L., decreto.ministeriale per D.M.\n"
+        "- url_normattiva: URL su normattiva.it\n"
         "- ai_motivation: 1-2 frasi su perché questa norma è pertinente per la query specifica\n\n"
         "Rispondi SOLO con JSON: {\"discovered\": [<lista schede>]}"
     )
@@ -412,18 +532,26 @@ def discover_missing_norme(
         return []
 
 
-def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
+def persist_discovered_norme(discovered: list[dict], query_text: str = "") -> list[dict]:
     """
     Per ogni norma scoperta da Groq esegue (in ordine):
     1. Normalizzazione ID
     2. Check duplicato DB locale
     3. Check blocklist
-    4. Validazione coerenza interna (ID ↔ estremi)
+    4. Validazione E — strict ID/estremi/titolo (anti-allucinazione strutturale)
     5. Normalizzazione URL normattiva
-    6. Verifica HTTP che l'URL esista su normattiva.it  ← nuovo
-    7. Generazione embedding + insert Supabase
+    6. Validazione D — similarity coseno query↔descrizione norma
+    7. Verifica HTTP esistenza su normattiva.it
+    8. Generazione embedding + insert Supabase
     """
     from api.utils.supabase_search import get_embedding, insert_norma_to_supabase
+
+    # Pre-calcola embedding query una sola volta (riuso per tutti i candidati)
+    query_embedding = None
+    if query_text.strip():
+        query_embedding = get_embedding(query_text)
+        if query_embedding is None:
+            print("[PERSIST] query_embedding fallito → similarity check D disabilitato", flush=True)
 
     persisted = []
     for norma in discovered:
@@ -443,15 +571,23 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
         if _is_blocklisted(norma):
             continue
 
-        # 4. Validazione coerenza interna
+        # 4. Validazione E (strict)
         if not _is_valid_norma_italiana(norma):
             continue
 
-        # 5. Normalizza URL (tipo atto)
+        # 5. Normalizza URL
         norma["url_normattiva"] = _normalize_url_normattiva(norma)
         norma.setdefault("url_ricerca", norma["url_normattiva"])
 
-        # 6. Verifica HTTP esistenza su normattiva.it
+        # 6. Validazione D (similarity)
+        if query_embedding and not _check_discover_similarity(norma, query_embedding):
+            print(
+                f"[PERSIST] {norma['id']!r} scartata: similarity < {DISCOVER_MIN_SIMILARITY}",
+                flush=True,
+            )
+            continue
+
+        # 7. Verifica HTTP
         if not _check_url_normattiva_exists(norma):
             print(
                 f"[PERSIST] {norma['id']!r} scartata: URL non trovato su normattiva.it",
@@ -459,7 +595,7 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
             )
             continue
 
-        # 7. Embedding + insert Supabase
+        # 8. Embedding + insert Supabase
         embed_text = " ".join(filter(None, [
             norma.get("titolo", ""),
             norma.get("estremi", ""),
