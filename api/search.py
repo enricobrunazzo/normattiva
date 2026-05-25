@@ -713,14 +713,16 @@ class handler(BaseHTTPRequestHandler):
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
 
-        # 6. Se i risultati sono pochi (o zero), scopri norme mancanti via Groq
+        # 6. Scopri norme mancanti via Groq anche quando Supabase ha già risultati
         new_norme_added: list[str] = []
-        if len(results) < 3 and os.environ.get("GROQ_API_KEY", ""):
+        if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
                 persisted = persist_discovered_norme(discovered)
-                results = results + persisted
-                new_norme_added = [n.get("id", "") for n in persisted]
+                existing_ids = {r.get("id") for r in results}
+                deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
+                results = results + deduped_persisted
+                new_norme_added = [n.get("id", "") for n in deduped_persisted]
                 print(f"[DISCOVER] aggiunte {len(new_norme_added)} norme nuove: {new_norme_added}", flush=True)
 
         elapsed_ms = round((time.time() - t_start) * 1000)
