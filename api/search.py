@@ -882,3 +882,9 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
+
+
+# Alias per compatibilità con il parser AST statico di Vercel CLI 54+ (builds legacy).
+# Il runtime usa `class handler` (BaseHTTPRequestHandler), ma il CLI cerca `app` come
+# simbolo top-level. Questo alias soddisfa entrambi senza modificare la logica.
+app = handler
