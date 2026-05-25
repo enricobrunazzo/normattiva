@@ -6,9 +6,17 @@ from typing import Optional
 import json
 import os
 import re
+import sys
 import time
 import urllib.parse
 import urllib.request
+
+# ── sys.path injection: permette import da api/utils sia in locale che su Vercel ──────────────────────────
+_API_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(_API_DIR)
+for _p in (_ROOT_DIR, _API_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
 from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
