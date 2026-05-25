@@ -42,8 +42,9 @@ NEGO_THRESHOLD   = 215_000
 GROQ_MAX_CANDIDATES = 12
 MIN_SCORE_FOR_GROQ  = 2
 
-MODEL_EXPAND = "openai/gpt-oss-20b"
-MODEL_RANK   = "openai/gpt-oss-120b"
+# Modelli Groq validi (https://console.groq.com/docs/models)
+MODEL_EXPAND = "llama-3.1-8b-instant"      # veloce, per espansione tag
+MODEL_RANK   = "llama-3.3-70b-versatile"   # potente, per ranking e motivazioni AI
 
 _GROQ_HEADERS = {
     "Content-Type":    "application/json",
@@ -428,6 +429,7 @@ def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE, budget: float
     top = candidates[:k]
     for n in candidates:
         n.setdefault("text_vigente", "")
+        n.setdefault("ai_motivation", "")  # garantisce il campo anche per candidati da Supabase
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=k) as executor:
         future_to_norma = {executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n for n in top}
@@ -708,7 +710,7 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        # 3. Fetch testo vigente in parallelo
+        # 3. Fetch testo vigente in parallelo (inizializza anche ai_motivation per candidati Supabase)
         _fetch_norme_parallel(candidates)
 
         # 4. Ranking Groq: restituisce SOLO le norme che ritiene pertinenti
