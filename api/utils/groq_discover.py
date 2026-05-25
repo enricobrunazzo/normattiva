@@ -22,7 +22,7 @@ _GROQ_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-MODEL_RANK = "openai/gpt-oss-120b"
+MODEL_RANK = "llama-3.3-70b-versatile"  # fix: era openai/gpt-oss-120b (non più disponibile su Groq)
 
 # Segnali negativi nell'ai_motivation che indicano NON pertinenza.
 _NON_PERTINENCE_SIGNALS = [
@@ -122,7 +122,10 @@ def _extract_json(raw: str) -> dict:
             pass
     m = re.search(r"(\{[\s\S]*\})", raw)
     if m:
-        return json.loads(m.group(1))
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
     raise ValueError(f"Nessun JSON valido trovato. Raw: {raw[:300]!r}")
 
 
