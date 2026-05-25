@@ -778,7 +778,7 @@ def _run_diagnostics(full_query: str) -> dict:
     return diag
 
 
-class handler(BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -824,7 +824,6 @@ class handler(BaseHTTPRequestHandler):
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
-                # fix: passa query_text per abilitare similarity check D in persist_discovered_norme
                 persisted = persist_discovered_norme(discovered, query_text=testo)
                 existing_ids = {r.get("id") for r in results}
                 deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
@@ -875,6 +874,3 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-
-
-handler = handler
