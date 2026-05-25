@@ -25,11 +25,7 @@ _GROQ_HEADERS = {
 MODEL_RANK = "openai/gpt-oss-120b"
 
 # Segnali negativi nell'ai_motivation che indicano NON pertinenza.
-# ATTENZIONE: usare solo frasi sufficientemente specifiche per evitare falsi positivi.
-# NON usare segnali condizionali generici come "solo se" / "solo qualora" che
-# compaiono anche in motivazioni legittime (es. "qualora l'edificio sia vincolato").
 _NON_PERTINENCE_SIGNALS = [
-    # Negazioni esplicite
     "non pertinente",
     "non ha attinenza",
     "non disciplina",
@@ -41,7 +37,6 @@ _NON_PERTINENCE_SIGNALS = [
     "non concerne",
     "non è pertinente",
     "non è applicabile",
-    # Segnali specifici per norme PA-fornitore usate fuori contesto
     "non è direttamente applicabile",
     "applicabile esclusivamente ai fornitori",
     "riguarda esclusivamente i fornitori",
@@ -50,26 +45,25 @@ _NON_PERTINENCE_SIGNALS = [
     "non riguarda procedimenti interni",
 ]
 
-# Norme già presenti nel DB locale: (numero, anno) estratti dagli estremi
-# Usato per bloccare duplicati generati da Groq con ID diverso
+# Norme già presenti nel DB locale: (numero, anno)
 _LOCAL_DB_NORME_ESTREMI = [
-    ("36", "2023"),   # D.Lgs. 36/2023
-    ("82", "2005"),   # D.Lgs. 82/2005 CAD
-    ("33", "2013"),   # D.Lgs. 33/2013
-    ("190", "2012"),  # L. 190/2012
-    ("267", "2000"),  # D.Lgs. 267/2000 TUEL
-    ("165", "2001"),  # D.Lgs. 165/2001 TUPI
-    ("196", "2003"),  # D.Lgs. 196/2003 Privacy
-    ("81", "2008"),   # D.Lgs. 81/2008
-    ("118", "2011"),  # D.Lgs. 118/2011
-    ("136", "2010"),  # L. 136/2010
-    ("241", "1990"),  # L. 241/1990
-    ("50", "2016"),   # D.Lgs. 50/2016
-    ("296", "2006"),  # L. 296/2006
-    ("231", "2001"),  # D.Lgs. 231/2001
-    ("328", "2000"),  # L. 328/2000
-    ("104", "1992"),  # L. 104/1992
-    ("159", "2013"),  # D.P.C.M. 159/2013
+    ("36", "2023"),
+    ("82", "2005"),
+    ("33", "2013"),
+    ("190", "2012"),
+    ("267", "2000"),
+    ("165", "2001"),
+    ("196", "2003"),
+    ("81", "2008"),
+    ("118", "2011"),
+    ("136", "2010"),
+    ("241", "1990"),
+    ("50", "2016"),
+    ("296", "2006"),
+    ("231", "2001"),
+    ("328", "2000"),
+    ("104", "1992"),
+    ("159", "2013"),
 ]
 
 _LOCAL_DB_NORME_IDS = {
@@ -80,16 +74,12 @@ _LOCAL_DB_NORME_IDS = {
     "circ_agid_cloud_2021", "l_328_2000", "dpcm_159_2013", "l_104_1992",
 }
 
-# ── Blocklist: norme che NON devono mai essere inserite in Supabase
-# perché il loro numero/anno coincide con atti completamente diversi
-# da quelli rilevanti per la PA amministrativa (es. Codice della Strada).
-# Formato: (numero, anno, motivo)
+# ── Blocklist: norme da non inserire mai in Supabase (numero, anno, motivo)
 _BLOCKLIST_ESTREMI = [
-    ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
     ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
 ]
 
-# Mappa: prefisso degli estremi -> tipo corretto nell'URN normattiva.it
+# Mappa: prefisso estremi -> tipo URN normattiva.it
 _ESTREMI_TO_URN_TYPE = [
     (r"d\.?lgs\.?",           "decreto.legislativo"),
     (r"decreto legislativo",   "decreto.legislativo"),
@@ -103,7 +93,7 @@ _ESTREMI_TO_URN_TYPE = [
     (r"legge",                 "legge"),
 ]
 
-# Mappa: prefisso estremi -> prefisso ID snake_case canonico
+# Mappa: prefisso estremi -> prefisso ID snake_case
 _ESTREMI_TO_ID_PREFIX = [
     (r"d\.?lgs\.?",            "dlgs"),
     (r"decreto legislativo",    "dlgs"),
@@ -138,9 +128,7 @@ def _extract_json(raw: str) -> dict:
 
 def _normalize_id(norma: dict) -> str:
     """
-    Normalizza l'ID della norma generata da Groq per renderlo coerente
-    con la convenzione del DB locale: prefisso_numero_anno, tutto lowercase,
-    senza separatori multipli (es. d_lgs_42_2004 -> dlgs_42_2004).
+    Normalizza l'ID della norma: prefisso_numero_anno, lowercase.
     """
     nid = (norma.get("id") or "").strip().lower()
     estremi = (norma.get("estremi") or "").lower().strip()
@@ -162,45 +150,30 @@ def _normalize_id(norma: dict) -> str:
         return nid
 
     canonical_id = f"{canonical_prefix}_{numeri_norma[0]}_{anni[0]}"
-
     if canonical_id != nid:
         print(f"[PERSIST] ID normalizzato: {nid!r} -> {canonical_id!r}", flush=True)
     return canonical_id
 
 
 def _is_duplicate_of_local_db(norma: dict) -> bool:
-    """
-    Controlla se la norma generata da Groq è un duplicato di una norma
-    già presente nel DB locale, confrontando:
-    1. L'ID esatto (anche dopo normalizzazione)
-    2. Numero + anno estratti dagli estremi
-    """
     nid = (norma.get("id") or "").strip().lower()
     if nid in _LOCAL_DB_NORME_IDS:
         return True
-
     estremi = (norma.get("estremi") or "").lower()
     numeri = re.findall(r"\b(\d{2,4})\b", estremi)
     anni = [n for n in numeri if 1980 <= int(n) <= 2030]
     numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
-
     for num, anno in _LOCAL_DB_NORME_ESTREMI:
         if anno in anni and num in numeri_norma:
             return True
-
     return False
 
 
 def _is_blocklisted(norma: dict) -> bool:
-    """
-    Controlla se la norma generata da Groq è nella blocklist delle norme
-    da non inserire mai (es. Codice della Strada, norme irrilevanti per la PA).
-    """
     estremi = (norma.get("estremi") or "").lower()
     numeri = re.findall(r"\b(\d{2,4})\b", estremi)
     anni = [n for n in numeri if 1980 <= int(n) <= 2030]
     numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
-
     for num, anno, motivo in _BLOCKLIST_ESTREMI:
         if anno in anni and num in numeri_norma:
             print(f"[PERSIST] BLOCKLIST: {norma.get('id')!r} bloccato → {motivo}", flush=True)
@@ -210,39 +183,29 @@ def _is_blocklisted(norma: dict) -> bool:
 
 def _is_valid_norma_italiana(norma: dict) -> bool:
     """
-    Validazione di coerenza interna della scheda generata da Groq.
-    Blocca schede con evidenti incongruenze tra ID, estremi e titolo.
-
-    Regole:
-    - L'ID deve avere il formato atteso (prefisso_numero_anno)
-    - Il numero e l'anno nell'ID devono corrispondere a quelli negli estremi
-    - La descrizione non deve essere vuota
+    Valida coerenza interna: ID, estremi, titolo e descrizione non vuoti,
+    e numero/anno dell'ID presenti negli estremi.
     """
     nid = (norma.get("id") or "").strip().lower()
     estremi = (norma.get("estremi") or "").strip()
     descrizione = (norma.get("descrizione") or "").strip()
     titolo = (norma.get("titolo") or "").strip()
 
-    # Campi obbligatori non vuoti
     if not nid or not estremi or not descrizione or not titolo:
         print(f"[PERSIST] VALIDATION: scheda incompleta (id={nid!r}), skip", flush=True)
         return False
 
-    # L'ID deve rispettare il formato prefisso_numero_anno
     if not re.match(r'^[a-z]+_\d{2,3}_\d{4}$', nid):
-        # Accetta anche ID speciali con suffisso (es. l_296_2006_consip, circ_agid_cloud_2021)
         if not re.match(r'^[a-z0-9_]+$', nid) or len(nid) < 8:
             print(f"[PERSIST] VALIDATION: ID {nid!r} non rispetta il formato, skip", flush=True)
             return False
 
-    # Il numero nell'ID deve comparire anche negli estremi
     id_parts = nid.split("_")
     numeri_nel_id = [p for p in id_parts if p.isdigit() and len(p) <= 4]
     if numeri_nel_id:
         numero_norma = numeri_nel_id[0]
         anno_norma = numeri_nel_id[-1] if len(numeri_nel_id) > 1 else ""
         estremi_lower = estremi.lower()
-        # Verifica che numero e anno siano presenti negli estremi
         if numero_norma not in estremi_lower:
             print(
                 f"[PERSIST] VALIDATION: numero {numero_norma!r} dell'ID {nid!r} "
@@ -257,30 +220,82 @@ def _is_valid_norma_italiana(norma: dict) -> bool:
                 flush=True,
             )
             return False
-
     return True
 
 
+def _check_url_normattiva_exists(norma: dict) -> bool:
+    """
+    Verifica che l'URL normattiva.it della norma risponda con un codice HTTP
+    valido (200, 301, 302). Questo blocca l'inserimento di norme con URL
+    inventati da Groq che non esistono realmente su normattiva.it.
+
+    - Usa una HEAD request per minimizzare il traffico.
+    - Timeout 8s: abbastanza per normattiva.it (lento), non blocca il flusso.
+    - In caso di errore di rete, passa (fail open) per non bloccare norme reali
+      in caso di temporanea irraggiungibilità del sito.
+    """
+    url = (norma.get("url_normattiva") or "").strip()
+    if not url:
+        print(f"[PERSIST] URL_CHECK: {norma.get('id')!r} senza url_normattiva, skip check", flush=True)
+        return True  # nessun URL da verificare: lascia passare
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NormativaBot/1.0)"},
+            method="HEAD",
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            status = resp.status
+        ok = status in (200, 301, 302)
+        if ok:
+            print(f"[PERSIST] URL_CHECK OK: {norma.get('id')!r} → HTTP {status}", flush=True)
+        else:
+            print(
+                f"[PERSIST] URL_CHECK FAIL: {norma.get('id')!r} → HTTP {status} "
+                f"| url={url[:80]!r} | norma scartata",
+                flush=True,
+            )
+        return ok
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        # 404 = norma non esiste su normattiva.it → scarta
+        if status == 404:
+            print(
+                f"[PERSIST] URL_CHECK 404: {norma.get('id')!r} non trovata su normattiva.it "
+                f"| url={url[:80]!r} | norma scartata",
+                flush=True,
+            )
+            return False
+        # Altri codici HTTP (403, 500…): fail open per non scartare norme reali
+        print(
+            f"[PERSIST] URL_CHECK HTTP {status}: {norma.get('id')!r} → fail open "
+            f"(non scartiamo per errori server)",
+            flush=True,
+        )
+        return True
+    except Exception as exc:
+        # Timeout, DNS, connessione rifiutata: fail open
+        print(
+            f"[PERSIST] URL_CHECK ERROR: {norma.get('id')!r} → {type(exc).__name__}: {exc} "
+            f"→ fail open",
+            flush=True,
+        )
+        return True
+
+
 def _normalize_url_normattiva(norma: dict) -> str:
-    """
-    Corregge il tipo atto nell'URL normattiva generato da Groq.
-    Deriva il tipo corretto dagli estremi della norma e lo sostituisce
-    nell'URL se risulta errato (es. decreto.legge -> decreto.legislativo).
-    """
     url = (norma.get("url_normattiva") or "").strip()
     estremi = (norma.get("estremi") or "").lower().strip()
     if not url or not estremi:
         return url
-
     urn_type_correct = None
     for pattern, urn_type in _ESTREMI_TO_URN_TYPE:
         if re.match(pattern, estremi, re.IGNORECASE):
             urn_type_correct = urn_type
             break
-
     if not urn_type_correct:
         return url
-
     corrected = re.sub(
         r"(urn:nir:stato:)[^:]+(:)",
         lambda m: f"{m.group(1)}{urn_type_correct}{m.group(2)}",
@@ -292,10 +307,6 @@ def _normalize_url_normattiva(norma: dict) -> str:
 
 
 def filter_pertinent(results: list) -> list:
-    """
-    Rimuove i risultati la cui ai_motivation contiene segnali di non pertinenza.
-    Mantiene sempre i risultati senza ai_motivation (non ancora rankati da Groq).
-    """
     filtered = []
     for r in results:
         motivation = (r.get("ai_motivation") or "").lower()
@@ -315,18 +326,11 @@ def discover_missing_norme(
     oggetto: str,
     pertinent_results: list,
 ) -> list[dict]:
-    """
-    Chiede a Groq se, dato il contesto della query, mancano norme italiane rilevanti
-    non già presenti nei risultati pertinenti.
-    Restituisce una lista di schede norma (dict) pronte per l'inserimento in Supabase.
-    """
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         return []
 
-    already_covered = [
-        f"- {r['estremi']} — {r['titolo']}" for r in pertinent_results
-    ]
+    already_covered = [f"- {r['estremi']} — {r['titolo']}" for r in pertinent_results]
     local_db_refs = [
         "- D.Lgs. 36/2023 — Codice dei contratti pubblici",
         "- D.Lgs. 82/2005 — CAD",
@@ -346,8 +350,7 @@ def discover_missing_norme(
         "- L. 104/1992 — Assistenza disabili",
         "- D.P.C.M. 159/2013 — ISEE",
     ]
-    all_covered = already_covered + local_db_refs
-    already_str = "\n".join(all_covered)
+    already_str = "\n".join(already_covered + local_db_refs)
 
     prompt = (
         "Sei un esperto di diritto amministrativo italiano.\n"
@@ -408,45 +411,52 @@ def discover_missing_norme(
 
 def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
     """
-    Per ogni norma scoperta da Groq:
-    - Normalizza l'ID secondo la convenzione del DB locale
-    - Valida che non sia un duplicato del DB locale
-    - Valida che non sia in blocklist
-    - Valida coerenza interna della scheda (ID <-> estremi)
-    - Normalizza l'URL normattiva
-    - Genera l'embedding via Supabase Edge Function
-    - Inserisce nel DB Supabase
-    - Restituisce la lista delle norme effettivamente persisted (con score e ai_motivation)
+    Per ogni norma scoperta da Groq esegue (in ordine):
+    1. Normalizzazione ID
+    2. Check duplicato DB locale
+    3. Check blocklist
+    4. Validazione coerenza interna (ID ↔ estremi)
+    5. Normalizzazione URL normattiva
+    6. Verifica HTTP che l'URL esista su normattiva.it  ← nuovo
+    7. Generazione embedding + insert Supabase
     """
     from api.utils.supabase_search import get_embedding, insert_norma_to_supabase
 
     persisted = []
     for norma in discovered:
         if not norma.get("id") or not norma.get("titolo"):
-            print(f"[PERSIST] scheda senza id o titolo, skip", flush=True)
+            print("[PERSIST] scheda senza id o titolo, skip", flush=True)
             continue
 
-        # 1. Normalizza ID secondo convenzione del DB locale
+        # 1. Normalizza ID
         norma["id"] = _normalize_id(norma)
 
-        # 2. Validazione: scarta se è un duplicato del DB locale
+        # 2. Duplicato DB locale
         if _is_duplicate_of_local_db(norma):
-            print(f"[PERSIST] {norma['id']!r} è duplicato di una norma già nel DB locale, skip", flush=True)
+            print(f"[PERSIST] {norma['id']!r} è duplicato DB locale, skip", flush=True)
             continue
 
-        # 3. Validazione blocklist (norme irrilevanti per PA amministrativa)
+        # 3. Blocklist
         if _is_blocklisted(norma):
             continue
 
-        # 4. Validazione coerenza interna scheda (ID coerente con estremi)
+        # 4. Validazione coerenza interna
         if not _is_valid_norma_italiana(norma):
             continue
 
-        # 5. Normalizza URL normattiva (corregge tipo atto errato)
+        # 5. Normalizza URL (tipo atto)
         norma["url_normattiva"] = _normalize_url_normattiva(norma)
         norma.setdefault("url_ricerca", norma["url_normattiva"])
 
-        # Testo per embedding: titolo + descrizione + articoli chiave
+        # 6. Verifica HTTP esistenza su normattiva.it
+        if not _check_url_normattiva_exists(norma):
+            print(
+                f"[PERSIST] {norma['id']!r} scartata: URL non trovato su normattiva.it",
+                flush=True,
+            )
+            continue
+
+        # 7. Embedding + insert Supabase
         embed_text = " ".join(filter(None, [
             norma.get("titolo", ""),
             norma.get("estremi", ""),
