@@ -80,6 +80,15 @@ _LOCAL_DB_NORME_IDS = {
     "circ_agid_cloud_2021", "l_328_2000", "dpcm_159_2013", "l_104_1992",
 }
 
+# ── Blocklist: norme che NON devono mai essere inserite in Supabase
+# perché il loro numero/anno coincide con atti completamente diversi
+# da quelli rilevanti per la PA amministrativa (es. Codice della Strada).
+# Formato: (numero, anno, motivo)
+_BLOCKLIST_ESTREMI = [
+    ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
+    ("285", "1992", "D.Lgs. 285/1992 = Codice della Strada, irrilevante per PA amministrativa"),
+]
+
 # Mappa: prefisso degli estremi -> tipo corretto nell'URN normattiva.it
 _ESTREMI_TO_URN_TYPE = [
     (r"d\.?lgs\.?",           "decreto.legislativo"),
@@ -180,6 +189,76 @@ def _is_duplicate_of_local_db(norma: dict) -> bool:
             return True
 
     return False
+
+
+def _is_blocklisted(norma: dict) -> bool:
+    """
+    Controlla se la norma generata da Groq è nella blocklist delle norme
+    da non inserire mai (es. Codice della Strada, norme irrilevanti per la PA).
+    """
+    estremi = (norma.get("estremi") or "").lower()
+    numeri = re.findall(r"\b(\d{2,4})\b", estremi)
+    anni = [n for n in numeri if 1980 <= int(n) <= 2030]
+    numeri_norma = [n for n in numeri if int(n) not in range(1980, 2031)]
+
+    for num, anno, motivo in _BLOCKLIST_ESTREMI:
+        if anno in anni and num in numeri_norma:
+            print(f"[PERSIST] BLOCKLIST: {norma.get('id')!r} bloccato → {motivo}", flush=True)
+            return True
+    return False
+
+
+def _is_valid_norma_italiana(norma: dict) -> bool:
+    """
+    Validazione di coerenza interna della scheda generata da Groq.
+    Blocca schede con evidenti incongruenze tra ID, estremi e titolo.
+
+    Regole:
+    - L'ID deve avere il formato atteso (prefisso_numero_anno)
+    - Il numero e l'anno nell'ID devono corrispondere a quelli negli estremi
+    - La descrizione non deve essere vuota
+    """
+    nid = (norma.get("id") or "").strip().lower()
+    estremi = (norma.get("estremi") or "").strip()
+    descrizione = (norma.get("descrizione") or "").strip()
+    titolo = (norma.get("titolo") or "").strip()
+
+    # Campi obbligatori non vuoti
+    if not nid or not estremi or not descrizione or not titolo:
+        print(f"[PERSIST] VALIDATION: scheda incompleta (id={nid!r}), skip", flush=True)
+        return False
+
+    # L'ID deve rispettare il formato prefisso_numero_anno
+    if not re.match(r'^[a-z]+_\d{2,3}_\d{4}$', nid):
+        # Accetta anche ID speciali con suffisso (es. l_296_2006_consip, circ_agid_cloud_2021)
+        if not re.match(r'^[a-z0-9_]+$', nid) or len(nid) < 8:
+            print(f"[PERSIST] VALIDATION: ID {nid!r} non rispetta il formato, skip", flush=True)
+            return False
+
+    # Il numero nell'ID deve comparire anche negli estremi
+    id_parts = nid.split("_")
+    numeri_nel_id = [p for p in id_parts if p.isdigit() and len(p) <= 4]
+    if numeri_nel_id:
+        numero_norma = numeri_nel_id[0]
+        anno_norma = numeri_nel_id[-1] if len(numeri_nel_id) > 1 else ""
+        estremi_lower = estremi.lower()
+        # Verifica che numero e anno siano presenti negli estremi
+        if numero_norma not in estremi_lower:
+            print(
+                f"[PERSIST] VALIDATION: numero {numero_norma!r} dell'ID {nid!r} "
+                f"non trovato negli estremi {estremi!r}, skip",
+                flush=True,
+            )
+            return False
+        if anno_norma and anno_norma not in estremi_lower:
+            print(
+                f"[PERSIST] VALIDATION: anno {anno_norma!r} dell'ID {nid!r} "
+                f"non trovato negli estremi {estremi!r}, skip",
+                flush=True,
+            )
+            return False
+
+    return True
 
 
 def _normalize_url_normattiva(norma: dict) -> str:
@@ -332,6 +411,8 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
     Per ogni norma scoperta da Groq:
     - Normalizza l'ID secondo la convenzione del DB locale
     - Valida che non sia un duplicato del DB locale
+    - Valida che non sia in blocklist
+    - Valida coerenza interna della scheda (ID <-> estremi)
     - Normalizza l'URL normattiva
     - Genera l'embedding via Supabase Edge Function
     - Inserisce nel DB Supabase
@@ -345,15 +426,23 @@ def persist_discovered_norme(discovered: list[dict]) -> list[dict]:
             print(f"[PERSIST] scheda senza id o titolo, skip", flush=True)
             continue
 
-        # Normalizza ID secondo convenzione del DB locale
+        # 1. Normalizza ID secondo convenzione del DB locale
         norma["id"] = _normalize_id(norma)
 
-        # Validazione: scarta se è un duplicato del DB locale
+        # 2. Validazione: scarta se è un duplicato del DB locale
         if _is_duplicate_of_local_db(norma):
             print(f"[PERSIST] {norma['id']!r} è duplicato di una norma già nel DB locale, skip", flush=True)
             continue
 
-        # Normalizza URL normattiva (corregge tipo atto errato)
+        # 3. Validazione blocklist (norme irrilevanti per PA amministrativa)
+        if _is_blocklisted(norma):
+            continue
+
+        # 4. Validazione coerenza interna scheda (ID coerente con estremi)
+        if not _is_valid_norma_italiana(norma):
+            continue
+
+        # 5. Normalizza URL normattiva (corregge tipo atto errato)
         norma["url_normattiva"] = _normalize_url_normattiva(norma)
         norma.setdefault("url_ricerca", norma["url_normattiva"])
 
