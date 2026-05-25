@@ -170,7 +170,7 @@ NORMATIVE_DB = [
         "estremi": "L. 13 agosto 2010, n. 136",
         "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti dedicati e strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG e, se finanziato con fondi pubblici, il CUP. La mancata indicazione nelle determine costituisce violazione.",
         "articoli_chiave": ["art. 3 — obblighi di tracciabilit\u00e0 dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilit\u00e0"],
-        "tags": ["cig", "cup", "tracciabilit\u00e0", "rup", "tracciabilita", "flussi", "contratto"],
+        "tags": ["cig", "cup", "tracciabilit\u00e0", "rup", "tracciabilita", "flussi", "contratto", "appalto", "affidamento", "acquisto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
@@ -491,6 +491,24 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         return []
 
 
+def _inject_cig_if_needed(candidates: list, importo: str, convenzione: bool) -> list:
+    """Fix #2: inietta l_136_2010 se importo > SEMI_THRESHOLD e norma assente dai candidati."""
+    val = _parse_importo(importo)
+    if val is None or val <= SEMI_THRESHOLD or convenzione:
+        return candidates
+    existing_ids = {c["id"] for c in candidates}
+    if "l_136_2010" not in existing_ids:
+        norma_cig = NORME_BY_ID.get("l_136_2010")
+        if norma_cig:
+            c = norma_cig.copy()
+            c["score"] = 5
+            c["ai_motivation"] = ""
+            c["text_vigente"] = ""
+            candidates = candidates + [c]
+            print("[CIG BOOST] l_136_2010 iniettata nei candidati (importo boost)", flush=True)
+    return candidates
+
+
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
     matched: dict = {}
 
@@ -568,6 +586,10 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             "- Includi nella lista ranked SOLO le norme genuinamente pertinenti alla query.\n"
             "- Se una norma non \u00e8 pertinente, NON includerla nel ranked (non serve scriverlo, omettila).\n"
             "- Per ogni norma inclusa scrivi 1-2 frasi specifiche di motivation.\n"
+            "- Se tra i candidati sono presenti sia dlgs_36_2023 che dlgs_50_2016, "
+            "posiziona SEMPRE dlgs_36_2023 prima di dlgs_50_2016, "
+            "salvo che la query riguardi esplicitamente contratti storici, proroghe o "
+            "collaudi di appalti avviati prima del 1\u00b0 luglio 2023.\n"
             "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<motivazione>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
@@ -702,6 +724,9 @@ class handler(BaseHTTPRequestHandler):
             candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
+
+        # Fix #2: boost CIG — inietta l_136_2010 se importo > soglia minima e assente
+        candidates = _inject_cig_if_needed(candidates, importo, convenzione)
 
         _fetch_norme_parallel(candidates)
 
