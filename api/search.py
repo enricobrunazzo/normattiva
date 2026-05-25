@@ -62,6 +62,15 @@ K_FETCH_LIVE            = 3
 FETCH_TIMEOUT_PER_NORMA = 3
 FETCH_BUDGET_TOTAL      = 4
 
+# Keyword che segnalano un contratto storico / proroga (bug #2)
+_PROROGA_KEYWORDS = {
+    "proroga", "prorogare", "prorogato", "prorogata",
+    "previgente", "storico", "storica", "storici",
+    "collaudo", "collaudare", "collaudato",
+    "modifica", "modificare", "modificato",
+    "2016", "2017", "2018", "2019", "2020", "2021", "2022",
+}
+
 # ── Database normativo locale ──────────────────────────────────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
@@ -384,6 +393,12 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
     return f"\u20ac{val:,.0f} \u2014 Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
+def _is_proroga_query(testo: str, oggetto: str) -> bool:
+    """Bug #2: rileva se la query riguarda contratti storici/proroga/collaudo."""
+    tokens = set(re.split(r"[\s,./;:()\[\]\"']+", f"{testo} {oggetto}".lower()))
+    return bool(tokens & _PROROGA_KEYWORDS)
+
+
 def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
     if not url:
         return ""
@@ -406,8 +421,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=["\']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=["\']?main["\']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=["\'']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\'']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=["\'']?main["\'']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -491,8 +506,37 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         return []
 
 
+def _inject_dlgs50_pre_rank(candidates: list, testo: str, oggetto: str) -> list:
+    """Bug #2 fix: inietta dlgs_50_2016 nei candidati se query è su proroga/storico.
+
+    Viene chiamata PRIMA di _groq_rank, così Groq la vede e la include nel ranking
+    con motivazione appropriata.
+    """
+    if not _is_proroga_query(testo, oggetto):
+        return candidates
+    existing_ids = {c["id"] for c in candidates}
+    if "dlgs_50_2016" in existing_ids:
+        return candidates
+    norma = NORME_BY_ID.get("dlgs_50_2016")
+    if not norma:
+        return candidates
+    entry = norma.copy()
+    entry["score"] = 10
+    entry.setdefault("text_vigente", "")
+    entry.setdefault("ai_motivation", "")
+    # Inserisci subito dopo dlgs_36_2023 se presente, altrimenti in testa
+    insert_pos = 0
+    for i, c in enumerate(candidates):
+        if c["id"] == "dlgs_36_2023":
+            insert_pos = i + 1
+            break
+    new_candidates = candidates[:insert_pos] + [entry] + candidates[insert_pos:]
+    print(f"[PROROGA BOOST] dlgs_50_2016 iniettata in posizione {insert_pos} (pre-rank)", flush=True)
+    return new_candidates
+
+
 def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> list:
-    """Fix #2 v2: inietta l_136_2010 DOPO filter_pertinent, importo > SEMI_THRESHOLD.
+    """Bug #1 fix: inietta l_136_2010 DOPO filter_pertinent solo se importo > SEMI_THRESHOLD.
 
     Posizionamento: subito dopo l'ultima norma contrattuale (dlgs_36_2023 o dlgs_50_2016),
     o in coda se non trovata. Usa ai_motivation predefinita per non richiedere ulteriori
@@ -517,18 +561,30 @@ def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> l
         "della L. 136/2010 e a riportarlo nella determina a contrarre e nei documenti di pagamento. "
         "La mancata indicazione costituisce illecito amministrativo."
     )
-    # Inserisci subito dopo l'ultima norma contrattuale, altrimenti in coda
     CONTRACT_IDS = {"dlgs_36_2023", "dlgs_50_2016"}
     insert_after = -1
     for i, r in enumerate(results):
         if r["id"] in CONTRACT_IDS:
             insert_after = i
-    position = insert_after + 1  # Se -1+1=0 e nessuna norma contrattuale, mette in testa; meglio coda
-    if insert_after == -1:
-        position = len(results)
+    position = insert_after + 1 if insert_after >= 0 else len(results)
     new_results = results[:position] + [entry] + results[position:]
     print(f"[CIG BOOST v2] l_136_2010 iniettata in posizione {position} (post filter_pertinent)", flush=True)
     return new_results
+
+
+def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: bool) -> list:
+    """Bug #1 fix: rimuove l_136_2010 dai risultati di Groq se importo <= SEMI_THRESHOLD.
+
+    Groq può includere l_136_2010 autonomamente anche sotto soglia, con motivazione
+    generica e fuorviante. Sotto i 5.000€ il CIG non è obbligatorio: rimuoviamo la norma.
+    """
+    val = _parse_importo(importo)
+    if val is None or val > SEMI_THRESHOLD or convenzione:
+        return results
+    filtered = [r for r in results if r["id"] != "l_136_2010"]
+    if len(filtered) < len(results):
+        print(f"[CIG FILTER] rimossa l_136_2010 (importo \u20ac{val:,.0f} \u2264 {SEMI_THRESHOLD:,} \u2014 CIG non obbligatorio)", flush=True)
+    return filtered
 
 
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
@@ -588,6 +644,18 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
     groq_candidates = candidates[:GROQ_MAX_CANDIDATES]
     remaining = candidates[GROQ_MAX_CANDIDATES:]
     candidates_by_id = {c["id"]: c for c in groq_candidates}
+
+    # Bug #2: contestualizza il prompt se la query riguarda proroga/storico
+    proroga_hint = ""
+    if _is_proroga_query(testo, oggetto):
+        proroga_hint = (
+            "- ATTENZIONE: la query riguarda un contratto storico, una proroga o un collaudo "
+            "avviato prima del 1\u00b0 luglio 2023. In questo caso il D.Lgs. 50/2016 (codice "
+            "previgente) \u00e8 OBBLIGATORIAMENTE pertinente e deve essere incluso nel ranked, "
+            "preferibilmente dopo il D.Lgs. 36/2023 (che regola il procedimento in corso) "
+            "ma prima di tutte le altre norme.\n"
+        )
+
     try:
         norme_lines = []
         for n in groq_candidates:
@@ -612,6 +680,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             "posiziona SEMPRE dlgs_36_2023 prima di dlgs_50_2016, "
             "salvo che la query riguardi esplicitamente contratti storici, proroghe o "
             "collaudi di appalti avviati prima del 1\u00b0 luglio 2023.\n"
+            + proroga_hint +
             "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<motivazione>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
@@ -747,14 +816,20 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
+        # Bug #2 fix: boost dlgs_50_2016 pre-rank se query di proroga/storico
+        candidates = _inject_dlgs50_pre_rank(candidates, testo, oggetto)
+
         _fetch_norme_parallel(candidates)
 
         ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
+        # Bug #1 fix: rimuovi l_136_2010 se importo <= SEMI_THRESHOLD (Groq la inserisce erroneamente)
+        ranked = _remove_cig_if_below_threshold(ranked, importo, convenzione)
+
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
 
-        # Fix #2 v2: CIG boost post filter_pertinent — Groq non pu\u00f2 eliminarlo
+        # Bug #1 fix (parte 2): CIG boost post filter_pertinent — Groq non può eliminarlo
         results = _inject_cig_post_filter(results, importo, convenzione)
 
         new_norme_added: list[str] = []
