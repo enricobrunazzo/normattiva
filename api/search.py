@@ -427,8 +427,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\\'']?[^\"\\']*(?:atto|norma|testo|corpo|content)[^\"\\']*[\"\\'']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\\'']?main[\"\\'']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -874,3 +874,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
+
+
+# Alias top-level esplicito richiesto dal parser statico di Vercel CLI 54+
+handler = Handler
