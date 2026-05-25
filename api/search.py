@@ -491,22 +491,44 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         return []
 
 
-def _inject_cig_if_needed(candidates: list, importo: str, convenzione: bool) -> list:
-    """Fix #2: inietta l_136_2010 se importo > SEMI_THRESHOLD e norma assente dai candidati."""
+def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> list:
+    """Fix #2 v2: inietta l_136_2010 DOPO filter_pertinent, importo > SEMI_THRESHOLD.
+
+    Posizionamento: subito dopo l'ultima norma contrattuale (dlgs_36_2023 o dlgs_50_2016),
+    o in coda se non trovata. Usa ai_motivation predefinita per non richiedere ulteriori
+    chiamate Groq.
+    """
     val = _parse_importo(importo)
     if val is None or val <= SEMI_THRESHOLD or convenzione:
-        return candidates
-    existing_ids = {c["id"] for c in candidates}
-    if "l_136_2010" not in existing_ids:
-        norma_cig = NORME_BY_ID.get("l_136_2010")
-        if norma_cig:
-            c = norma_cig.copy()
-            c["score"] = 5
-            c["ai_motivation"] = ""
-            c["text_vigente"] = ""
-            candidates = candidates + [c]
-            print("[CIG BOOST] l_136_2010 iniettata nei candidati (importo boost)", flush=True)
-    return candidates
+        return results
+    existing_ids = {r["id"] for r in results}
+    if "l_136_2010" in existing_ids:
+        return results
+    norma_cig = NORME_BY_ID.get("l_136_2010")
+    if not norma_cig:
+        return results
+    entry = norma_cig.copy()
+    entry["score"] = 1
+    entry["text_vigente"] = ""
+    entry["text_vigente_disponibile"] = False
+    entry["ai_motivation"] = (
+        f"Per ogni contratto pubblico di importo superiore a \u20ac{SEMI_THRESHOLD:,} la stazione appaltante "
+        "\u00e8 obbligata ad acquisire il CIG (Codice Identificativo Gara) ai sensi dell'art. 3 co. 5 "
+        "della L. 136/2010 e a riportarlo nella determina a contrarre e nei documenti di pagamento. "
+        "La mancata indicazione costituisce illecito amministrativo."
+    )
+    # Inserisci subito dopo l'ultima norma contrattuale, altrimenti in coda
+    CONTRACT_IDS = {"dlgs_36_2023", "dlgs_50_2016"}
+    insert_after = -1
+    for i, r in enumerate(results):
+        if r["id"] in CONTRACT_IDS:
+            insert_after = i
+    position = insert_after + 1  # Se -1+1=0 e nessuna norma contrattuale, mette in testa; meglio coda
+    if insert_after == -1:
+        position = len(results)
+    new_results = results[:position] + [entry] + results[position:]
+    print(f"[CIG BOOST v2] l_136_2010 iniettata in posizione {position} (post filter_pertinent)", flush=True)
+    return new_results
 
 
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
@@ -725,15 +747,15 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        # Fix #2: boost CIG — inietta l_136_2010 se importo > soglia minima e assente
-        candidates = _inject_cig_if_needed(candidates, importo, convenzione)
-
         _fetch_norme_parallel(candidates)
 
         ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
+
+        # Fix #2 v2: CIG boost post filter_pertinent — Groq non pu\u00f2 eliminarlo
+        results = _inject_cig_post_filter(results, importo, convenzione)
 
         new_norme_added: list[str] = []
         if os.environ.get("GROQ_API_KEY", ""):
