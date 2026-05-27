@@ -1,6 +1,5 @@
 """Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama. v2"""
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from http.server import BaseHTTPRequestHandler
 from html import unescape
 import json
 import os
@@ -777,102 +776,103 @@ def _run_diagnostics(full_query: str) -> dict:
     return diag
 
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
-        testo = params.get("testo", [""])[0].strip() or params.get("q", [""])[0].strip()
-        tipo_atto = params.get("tipo_atto", [""])[0].strip().lower()
-        oggetto = params.get("oggetto", [""])[0].strip()
-        importo = params.get("importo", [""])[0].strip()
-        convenzione = params.get("convenzione", ["false"])[0].strip().lower() in ("true", "1", "yes")
-        debug_mode = params.get("debug", ["false"])[0].strip().lower() in ("true", "1", "yes")
-        t_start = time.time()
-        print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        diagnostics = None
-        if debug_mode:
-            full_query_diag = f"{testo} {oggetto}".strip()
-            diagnostics = _run_diagnostics(full_query_diag)
-            print(f"[DIAG] {json.dumps(diagnostics)}", flush=True)
+from urllib.parse import urlparse, parse_qs
 
-        expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
-        full_query = f"{testo} {oggetto}".strip()
+def app(environ, start_response):
+    method = environ.get("REQUEST_METHOD", "GET").upper()
 
-        candidates = supabase_vector_search(full_query, convenzione=convenzione)
-        source = "supabase"
-        if not candidates:
-            candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
-            source = "tag_fallback"
-        print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
+    if method == "OPTIONS":
+        start_response("204 No Content", [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type"),
+        ])
+        return [b""]
 
-        candidates = _inject_dlgs50_pre_rank(candidates, testo, oggetto)
+    path = environ.get("PATH_INFO", "/") + ("?" + environ["QUERY_STRING"] if environ.get("QUERY_STRING") else "")
+    parsed = urlparse(path)
+    params = parse_qs(parsed.query)
+    testo = params.get("testo", [""])[0].strip() or params.get("q", [""])[0].strip()
+    tipo_atto = params.get("tipo_atto", [""])[0].strip().lower()
+    oggetto = params.get("oggetto", [""])[0].strip()
+    importo = params.get("importo", [""])[0].strip()
+    convenzione = params.get("convenzione", ["false"])[0].strip().lower() in ("true", "1", "yes")
+    debug_mode = params.get("debug", ["false"])[0].strip().lower() in ("true", "1", "yes")
+    t_start = time.time()
+    print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        _fetch_norme_parallel(candidates)
+    diagnostics = None
+    if debug_mode:
+        full_query_diag = f"{testo} {oggetto}".strip()
+        diagnostics = _run_diagnostics(full_query_diag)
+        print(f"[DIAG] {json.dumps(diagnostics)}", flush=True)
 
-        ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
+    expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
+    full_query = f"{testo} {oggetto}".strip()
 
-        ranked = _remove_cig_if_below_threshold(ranked, importo, convenzione)
+    candidates = supabase_vector_search(full_query, convenzione=convenzione)
+    source = "supabase"
+    if not candidates:
+        candidates = _tag_search(testo, tipo_atto, oggetto, importo, convenzione, expanded_tags)
+        source = "tag_fallback"
+    print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        results = filter_pertinent(ranked)
-        print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
+    candidates = _inject_dlgs50_pre_rank(candidates, testo, oggetto)
+    _fetch_norme_parallel(candidates)
+    ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
+    ranked = _remove_cig_if_below_threshold(ranked, importo, convenzione)
+    results = filter_pertinent(ranked)
+    print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
+    results = _inject_cig_post_filter(results, importo, convenzione)
 
-        results = _inject_cig_post_filter(results, importo, convenzione)
+    new_norme_added: list[str] = []
+    if os.environ.get("GROQ_API_KEY", ""):
+        discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
+        if discovered:
+            persisted = persist_discovered_norme(discovered)
+            existing_ids = {r.get("id") for r in results}
+            deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
+            results = results + deduped_persisted
+            new_norme_added = [n.get("id", "") for n in deduped_persisted]
+            print(f"[DISCOVER] aggiunte {len(new_norme_added)} norme nuove: {new_norme_added}", flush=True)
 
-        new_norme_added: list[str] = []
-        if os.environ.get("GROQ_API_KEY", ""):
-            discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
-            if discovered:
-                persisted = persist_discovered_norme(discovered)
-                existing_ids = {r.get("id") for r in results}
-                deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
-                results = results + deduped_persisted
-                new_norme_added = [n.get("id", "") for n in deduped_persisted]
-                print(f"[DISCOVER] aggiunte {len(new_norme_added)} norme nuove: {new_norme_added}", flush=True)
+    elapsed_ms = round((time.time() - t_start) * 1000)
 
-        elapsed_ms = round((time.time() - t_start) * 1000)
+    output = {
+        "query": testo,
+        "tipo_atto": tipo_atto,
+        "oggetto": oggetto,
+        "importo_label": _importo_label(importo, convenzione),
+        "convenzione": convenzione,
+        "search_source": source,
+        "ai_active": bool(os.environ.get("GROQ_API_KEY", "")),
+        "new_norme_added": new_norme_added,
+        "results": results,
+        "elapsed_ms": elapsed_ms,
+    }
 
-        output = {
-            "query": testo,
-            "tipo_atto": tipo_atto,
-            "oggetto": oggetto,
-            "importo_label": _importo_label(importo, convenzione),
-            "convenzione": convenzione,
-            "search_source": source,
-            "ai_active": bool(os.environ.get("GROQ_API_KEY", "")),
-            "new_norme_added": new_norme_added,
-            "results": results,
-            "elapsed_ms": elapsed_ms,
-        }
+    if diagnostics is not None:
+        output["_diagnostics"] = diagnostics
 
-        if diagnostics is not None:
-            output["_diagnostics"] = diagnostics
+    log_query_to_supabase(
+        query_text=testo,
+        tipo_atto=tipo_atto,
+        oggetto=oggetto,
+        importo=importo,
+        convenzione=convenzione,
+        results_count=len(results),
+        elapsed_ms=elapsed_ms,
+        groq_used=bool(os.environ.get("GROQ_API_KEY", "")),
+    )
 
-        log_query_to_supabase(
-            query_text=testo,
-            tipo_atto=tipo_atto,
-            oggetto=oggetto,
-            importo=importo,
-            convenzione=convenzione,
-            results_count=len(results),
-            elapsed_ms=elapsed_ms,
-            groq_used=bool(os.environ.get("GROQ_API_KEY", "")),
-        )
-
-        body = json.dumps(output, ensure_ascii=False, indent=2).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
+    body = json.dumps(output, ensure_ascii=False, indent=2).encode("utf-8")
+    start_response("200 OK", [
+        ("Content-Type", "application/json; charset=utf-8"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Content-Length", str(len(body))),
+    ])
+    return [body]
 
 
-handler = handler
+handler = app
