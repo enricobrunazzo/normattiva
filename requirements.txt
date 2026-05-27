@@ -1,2 +1,1 @@
-# Runtime Vercel: stdlib pura, zero dipendenze pip
-# supabase SDK usato solo negli script locali (scripts/)
+# zero dipendenze — stdlib pura
