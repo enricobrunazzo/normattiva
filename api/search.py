@@ -1,4 +1,4 @@
-"""Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama. v2"""
+"""Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
@@ -9,10 +9,10 @@ import time
 import urllib.parse
 import urllib.request
 
-from utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
-from utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
+from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase
+from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
-# ── Defensive startup log ─────────────────────────────────────────────────────────────────────────────────
+# ── Defensive startup log ────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
 _SUPABASE_CONFIGURED = bool(os.environ.get("SUPABASE_URL", "") and os.environ.get("SUPABASE_KEY", ""))
 print(
@@ -34,7 +34,7 @@ if not _SUPABASE_CONFIGURED:
         flush=True,
     )
 
-# ── Soglie D.Lgs. 36/2023 ────────────────────────────────────────────────────────────────────────────────
+# ── Soglie D.Lgs. 36/2023 ─────────────────────────────────────────────────────
 SEMI_THRESHOLD   = 5_000
 DIRECT_THRESHOLD = 140_000
 NEGO_THRESHOLD   = 215_000
@@ -42,9 +42,8 @@ NEGO_THRESHOLD   = 215_000
 GROQ_MAX_CANDIDATES = 12
 MIN_SCORE_FOR_GROQ  = 2
 
-# Modelli Groq validi (https://console.groq.com/docs/models)
-MODEL_EXPAND = "llama-3.1-8b-instant"      # veloce, per espansione tag
-MODEL_RANK   = "llama-3.3-70b-versatile"   # potente, per ranking e motivazioni AI
+MODEL_EXPAND = "openai/gpt-oss-20b"
+MODEL_RANK   = "openai/gpt-oss-120b"
 
 _GROQ_HEADERS = {
     "Content-Type":    "application/json",
@@ -62,16 +61,7 @@ K_FETCH_LIVE            = 3
 FETCH_TIMEOUT_PER_NORMA = 3
 FETCH_BUDGET_TOTAL      = 4
 
-# Keyword che segnalano un contratto storico / proroga (bug #2)
-_PROROGA_KEYWORDS = {
-    "proroga", "prorogare", "prorogato", "prorogata",
-    "previgente", "storico", "storica", "storici",
-    "collaudo", "collaudare", "collaudato",
-    "modifica", "modificare", "modificato",
-    "2016", "2017", "2018", "2019", "2020", "2021", "2022",
-}
-
-# ── Database normativo locale ──────────────────────────────────────────────────────────────────────────────
+# ── Database normativo locale ──────────────────────────────────────────────────
 NORMATIVE_DB = [
     {
         "id": "dlgs_36_2023",
@@ -179,7 +169,7 @@ NORMATIVE_DB = [
         "estremi": "L. 13 agosto 2010, n. 136",
         "descrizione": "Obbliga le stazioni appaltanti a utilizzare conti dedicati e strumenti tracciabili. Ogni contratto pubblico deve riportare il CIG e, se finanziato con fondi pubblici, il CUP. La mancata indicazione nelle determine costituisce violazione.",
         "articoli_chiave": ["art. 3 — obblighi di tracciabilità dei flussi finanziari", "art. 3 co. 5 — obbligo CIG e CUP", "art. 6 — sanzioni per violazione tracciabilità"],
-        "tags": ["cig", "cup", "tracciabilità", "rup", "tracciabilita", "flussi", "contratto", "appalto", "affidamento", "acquisto"],
+        "tags": ["cig", "cup", "tracciabilità", "rup", "tracciabilita", "flussi", "contratto"],
         "url_normattiva": "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:2010-08-13;136",
         "url_ricerca": "https://www.normattiva.it/ricerca/semplice?query=legge+136+2010+tracciabilita+flussi+finanziari+CIG",
     },
@@ -350,11 +340,6 @@ SEMANTIC_MAP = {
     "nucleo": ["nucleo-familiare", "isee", "isee-sociosanitario", "servizi-sociali"],
     "familiare": ["nucleo-familiare", "isee", "servizi-sociali"],
     "assistente": ["assistente-sociale", "servizi-sociali", "sociale"],
-    "esterno": ["consulenza", "incarico", "personale"],
-    "consulente": ["consulenza", "incarico", "personale"],
-    "videosorveglianza": ["privacy", "dati", "gdpr", "trattamento", "personali"],
-    "telecamere": ["privacy", "dati", "gdpr", "trattamento"],
-    "sorveglianza": ["privacy", "dati", "gdpr", "trattamento"],
 }
 
 STOP_WORDS = {"il","lo","la","i","gli","le","un","uno","una","di","del","della","degli","dei","delle","a","al","alla","ai","agli","alle","da","dal","dalla","dai","dagli","dalle","in","nel","nella","nei","negli","nelle","con","su","per","tra","fra","che","chi","cui","non","ma","se","ho","ha","hanno","devo","deve","voglio","fare","sono","e","o","come","quando","dove","questo","questa","questi","queste","also","such"}
@@ -388,20 +373,14 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
     if val is None:
         return ""
     if convenzione:
-        return f"\u20ac{val:,.0f} \u2014 Adesione a convenzione Consip / Ordine su MEPA"
+        return f"€{val:,.0f} — Adesione a convenzione Consip / Ordine su MEPA"
     if val <= SEMI_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
+        return f"€{val:,.0f} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
     elif val <= DIRECT_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto (art. 50, D.Lgs. 36/2023)"
+        return f"€{val:,.0f} — Affidamento diretto (art. 50, D.Lgs. 36/2023)"
     elif val <= NEGO_THRESHOLD:
-        return f"\u20ac{val:,.0f} \u2014 Procedura negoziata (art. 72, D.Lgs. 36/2023)"
-    return f"\u20ac{val:,.0f} \u2014 Procedura aperta (art. 71, D.Lgs. 36/2023)"
-
-
-def _is_proroga_query(testo: str, oggetto: str) -> bool:
-    """Bug #2: rileva se la query riguarda contratti storici/proroga/collaudo."""
-    tokens = set(re.split(r"[\s,./;:()\[\]\"']+", f"{testo} {oggetto}".lower()))
-    return bool(tokens & _PROROGA_KEYWORDS)
+        return f"€{val:,.0f} — Procedura negoziata (art. 72, D.Lgs. 36/2023)"
+    return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
 def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
@@ -426,8 +405,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=["\']?[^"\']*(?:atto|norma|testo|corpo|content)[^"\']*["\']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=["\']?main["\']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -449,7 +428,6 @@ def _fetch_norme_parallel(candidates: list, k: int = K_FETCH_LIVE, budget: float
     top = candidates[:k]
     for n in candidates:
         n.setdefault("text_vigente", "")
-        n.setdefault("ai_motivation", "")  # garantisce il campo anche per candidati da Supabase
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=k) as executor:
         future_to_norma = {executor.submit(_fetch_norma_text, n.get("url_normattiva", "")): n for n in top}
@@ -511,73 +489,6 @@ def _groq_expand_query(testo: str, oggetto: str, tipo_atto: str) -> list[str]:
         return []
 
 
-def _inject_dlgs50_pre_rank(candidates: list, testo: str, oggetto: str) -> list:
-    """Bug #2 fix: inietta dlgs_50_2016 nei candidati se query è su proroga/storico."""
-    if not _is_proroga_query(testo, oggetto):
-        return candidates
-    existing_ids = {c["id"] for c in candidates}
-    if "dlgs_50_2016" in existing_ids:
-        return candidates
-    norma = NORME_BY_ID.get("dlgs_50_2016")
-    if not norma:
-        return candidates
-    entry = norma.copy()
-    entry["score"] = 10
-    entry.setdefault("text_vigente", "")
-    entry.setdefault("ai_motivation", "")
-    insert_pos = 0
-    for i, c in enumerate(candidates):
-        if c["id"] == "dlgs_36_2023":
-            insert_pos = i + 1
-            break
-    new_candidates = candidates[:insert_pos] + [entry] + candidates[insert_pos:]
-    print(f"[PROROGA BOOST] dlgs_50_2016 iniettata in posizione {insert_pos} (pre-rank)", flush=True)
-    return new_candidates
-
-
-def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> list:
-    """Bug #1 fix: inietta l_136_2010 DOPO filter_pertinent solo se importo > SEMI_THRESHOLD."""
-    val = _parse_importo(importo)
-    if val is None or val <= SEMI_THRESHOLD or convenzione:
-        return results
-    existing_ids = {r["id"] for r in results}
-    if "l_136_2010" in existing_ids:
-        return results
-    norma_cig = NORME_BY_ID.get("l_136_2010")
-    if not norma_cig:
-        return results
-    entry = norma_cig.copy()
-    entry["score"] = 1
-    entry["text_vigente"] = ""
-    entry["text_vigente_disponibile"] = False
-    entry["ai_motivation"] = (
-        f"Per ogni contratto pubblico di importo superiore a \u20ac{SEMI_THRESHOLD:,} la stazione appaltante "
-        "è obbligata ad acquisire il CIG (Codice Identificativo Gara) ai sensi dell'art. 3 co. 5 "
-        "della L. 136/2010 e a riportarlo nella determina a contrarre e nei documenti di pagamento. "
-        "La mancata indicazione costituisce illecito amministrativo."
-    )
-    CONTRACT_IDS = {"dlgs_36_2023", "dlgs_50_2016"}
-    insert_after = -1
-    for i, r in enumerate(results):
-        if r["id"] in CONTRACT_IDS:
-            insert_after = i
-    position = insert_after + 1 if insert_after >= 0 else len(results)
-    new_results = results[:position] + [entry] + results[position:]
-    print(f"[CIG BOOST v2] l_136_2010 iniettata in posizione {position} (post filter_pertinent)", flush=True)
-    return new_results
-
-
-def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: bool) -> list:
-    """Bug #1 fix: rimuove l_136_2010 dai risultati di Groq se importo <= SEMI_THRESHOLD."""
-    val = _parse_importo(importo)
-    if val is None or val > SEMI_THRESHOLD or convenzione:
-        return results
-    filtered = [r for r in results if r["id"] != "l_136_2010"]
-    if len(filtered) < len(results):
-        print(f"[CIG FILTER] rimossa l_136_2010 (importo \u20ac{val:,.0f} \u2264 {SEMI_THRESHOLD:,} \u2014 CIG non obbligatorio)", flush=True)
-    return filtered
-
-
 def _tag_search(testo: str, tipo_atto: str, oggetto: str, importo: str, convenzione: bool = False, expanded_tags: list | None = None) -> list:
     matched: dict = {}
 
@@ -634,22 +545,10 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
         return candidates
     groq_candidates = candidates[:GROQ_MAX_CANDIDATES]
     remaining = candidates[GROQ_MAX_CANDIDATES:]
-    candidates_by_id = {c["id"]: c for c in groq_candidates}
-
-    proroga_hint = ""
-    if _is_proroga_query(testo, oggetto):
-        proroga_hint = (
-            "- ATTENZIONE: la query riguarda un contratto storico, una proroga o un collaudo "
-            "avviato prima del 1° luglio 2023. In questo caso il D.Lgs. 50/2016 (codice "
-            "previgente) è OBBLIGATORIAMENTE pertinente e deve essere incluso nel ranked, "
-            "preferibilmente dopo il D.Lgs. 36/2023 (che regola il procedimento in corso) "
-            "ma prima di tutte le altre norme.\n"
-        )
-
     try:
         norme_lines = []
         for n in groq_candidates:
-            line = f"- ID: {n['id']} | {n['estremi']} \u2014 {n['titolo']}"
+            line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
                 line += f"\n  [Testo vigente]: {testo_vigente[:600].replace(chr(10), ' ')}..."
@@ -666,11 +565,6 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
             "- Includi nella lista ranked SOLO le norme genuinamente pertinenti alla query.\n"
             "- Se una norma non è pertinente, NON includerla nel ranked (non serve scriverlo, omettila).\n"
             "- Per ogni norma inclusa scrivi 1-2 frasi specifiche di motivation.\n"
-            "- Se tra i candidati sono presenti sia dlgs_36_2023 che dlgs_50_2016, "
-            "posiziona SEMPRE dlgs_36_2023 prima di dlgs_50_2016, "
-            "salvo che la query riguardi esplicitamente contratti storici, proroghe o "
-            "collaudi di appalti avviati prima del 1° luglio 2023.\n"
-            + proroga_hint +
             "Restituisci JSON: {\"ranked\": [{\"id\": \"<id_norma>\", \"motivation\": \"<motivazione>\"}]}"
         )
         payload = json.dumps({"model": MODEL_RANK, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}).encode()
@@ -687,94 +581,18 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
         reranked = []
         for item in ranked_list:
             nid = item["id"]
-            norma = candidates_by_id.get(nid) or NORME_BY_ID.get(nid)
-            if norma is None:
-                print(f"[GROQ RANK] ID {nid!r} non trovato nei candidati né nel DB locale, skip", flush=True)
-                continue
-            norma = norma.copy()
-            norma["score"] = 100 - len(reranked)
-            norma["ai_motivation"] = ranked_map.get(nid, "")
-            norma["text_vigente_disponibile"] = bool(norma.get("text_vigente", "").strip())
-            reranked.append(norma)
+            if nid in NORME_BY_ID:
+                norma = next((c for c in groq_candidates if c["id"] == nid), NORME_BY_ID[nid].copy())
+                norma = norma.copy()
+                norma["score"] = 100 - len(reranked)
+                norma["ai_motivation"] = ranked_map.get(nid, "")
+                norma["text_vigente_disponibile"] = bool(norma.get("text_vigente", "").strip())
+                reranked.append(norma)
         print(f"[GROQ RANK] reranked={len(reranked)} norme pertinenti (omesse le non pertinenti)", flush=True)
         return reranked + remaining
     except Exception as exc:
         print(f"[GROQ ERROR] {type(exc).__name__}: {exc}", flush=True)
         return candidates
-
-
-def _run_diagnostics(full_query: str) -> dict:
-    """Esegue una diagnostica completa e ritorna un dict con i risultati."""
-    diag = {}
-    supa_url = os.environ.get("SUPABASE_URL", "")
-    supa_key = os.environ.get("SUPABASE_KEY", "")
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    diag["supabase_url_set"] = bool(supa_url)
-    diag["supabase_key_set"] = bool(supa_key)
-    diag["groq_key_set"] = bool(groq_key)
-    diag["supabase_url_prefix"] = supa_url[:40] if supa_url else "MISSING"
-
-    if not supa_url or not supa_key:
-        diag["embed_result"] = "SKIP (env var mancanti)"
-        return diag
-
-    edge_url = f"{supa_url}/functions/v1/embed"
-    try:
-        payload = json.dumps({"input": full_query[:200]}).encode()
-        req = urllib.request.Request(
-            edge_url,
-            data=payload,
-            headers={"Authorization": f"Bearer {supa_key}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            status = resp.status
-            body = json.loads(resp.read().decode())
-        emb = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
-        diag["embed_status"] = status
-        diag["embed_keys"] = list(body.keys())
-        diag["embed_dim"] = len(emb) if emb else 0
-        diag["embed_ok"] = emb is not None
-    except Exception as exc:
-        diag["embed_status"] = "ERROR"
-        diag["embed_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
-        diag["embed_ok"] = False
-
-    if diag.get("embed_ok") and diag.get("embed_dim", 0) > 0:
-        emb_list = body.get("embedding") or body.get("data", [{}])[0].get("embedding")
-        vector_str = "[" + ",".join(str(x) for x in emb_list) + "]"
-        rpc_url = f"{supa_url}/rest/v1/rpc/search_norme_by_embedding"
-        try:
-            rpc_payload = json.dumps({
-                "query_embedding": vector_str,
-                "match_threshold": 0.3,
-                "match_count": 3,
-            }).encode()
-            rpc_req = urllib.request.Request(
-                rpc_url,
-                data=rpc_payload,
-                headers={
-                    "apikey": supa_key,
-                    "Authorization": f"Bearer {supa_key}",
-                    "Content-Type": "application/json",
-                    "Prefer": "return=representation",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(rpc_req, timeout=10) as resp:
-                rpc_status = resp.status
-                rpc_body = json.loads(resp.read().decode())
-            diag["rpc_status"] = rpc_status
-            diag["rpc_results_count"] = len(rpc_body) if isinstance(rpc_body, list) else "not_list"
-            diag["rpc_ok"] = isinstance(rpc_body, list)
-        except Exception as exc:
-            diag["rpc_status"] = "ERROR"
-            diag["rpc_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
-            diag["rpc_ok"] = False
-    else:
-        diag["rpc_status"] = "SKIP (embed fallito)"
-
-    return diag
 
 
 class handler(BaseHTTPRequestHandler):
@@ -786,19 +604,14 @@ class handler(BaseHTTPRequestHandler):
         oggetto = params.get("oggetto", [""])[0].strip()
         importo = params.get("importo", [""])[0].strip()
         convenzione = params.get("convenzione", ["false"])[0].strip().lower() in ("true", "1", "yes")
-        debug_mode = params.get("debug", ["false"])[0].strip().lower() in ("true", "1", "yes")
         t_start = time.time()
         print(f"[REQUEST] q={testo!r} | tipo={tipo_atto!r} | oggetto={oggetto!r} | importo={importo!r} | convenzione={convenzione}", flush=True)
 
-        diagnostics = None
-        if debug_mode:
-            full_query_diag = f"{testo} {oggetto}".strip()
-            diagnostics = _run_diagnostics(full_query_diag)
-            print(f"[DIAG] {json.dumps(diagnostics)}", flush=True)
-
+        # 1. Espansione tag via Groq
         expanded_tags = _groq_expand_query(testo, oggetto, tipo_atto)
         full_query = f"{testo} {oggetto}".strip()
 
+        # 2. Ricerca candidati (Supabase vector o fallback tag)
         candidates = supabase_vector_search(full_query, convenzione=convenzione)
         source = "supabase"
         if not candidates:
@@ -806,28 +619,24 @@ class handler(BaseHTTPRequestHandler):
             source = "tag_fallback"
         print(f"[SEARCH] source={source} | candidates={len(candidates)}", flush=True)
 
-        candidates = _inject_dlgs50_pre_rank(candidates, testo, oggetto)
-
+        # 3. Fetch testo vigente in parallelo
         _fetch_norme_parallel(candidates)
 
+        # 4. Ranking Groq: restituisce SOLO le norme che ritiene pertinenti
         ranked = _groq_rank(testo, tipo_atto, oggetto, importo, candidates, convenzione)
 
-        ranked = _remove_cig_if_below_threshold(ranked, importo, convenzione)
-
+        # 5. Filtro di sicurezza: rimuovi eventuali residui non pertinenti via ai_motivation
         results = filter_pertinent(ranked)
         print(f"[FILTER] dopo filter_pertinent: {len(results)} risultati", flush=True)
 
-        results = _inject_cig_post_filter(results, importo, convenzione)
-
+        # 6. Se i risultati sono pochi (o zero), scopri norme mancanti via Groq
         new_norme_added: list[str] = []
-        if os.environ.get("GROQ_API_KEY", ""):
+        if len(results) < 3 and os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
                 persisted = persist_discovered_norme(discovered)
-                existing_ids = {r.get("id") for r in results}
-                deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
-                results = results + deduped_persisted
-                new_norme_added = [n.get("id", "") for n in deduped_persisted]
+                results = results + persisted
+                new_norme_added = [n.get("id", "") for n in persisted]
                 print(f"[DISCOVER] aggiunte {len(new_norme_added)} norme nuove: {new_norme_added}", flush=True)
 
         elapsed_ms = round((time.time() - t_start) * 1000)
@@ -844,9 +653,6 @@ class handler(BaseHTTPRequestHandler):
             "results": results,
             "elapsed_ms": elapsed_ms,
         }
-
-        if diagnostics is not None:
-            output["_diagnostics"] = diagnostics
 
         log_query_to_supabase(
             query_text=testo,
