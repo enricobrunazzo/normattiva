@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "outputDirectory": "public",
   "routes": [
     { "src": "/api/search", "dest": "/api/search.py" },
     { "src": "/api/norma",  "dest": "/api/norma.py"  },
     { "src": "/api/ingest", "dest": "/api/ingest.py" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)",       "dest": "/index.html" }
+    { "src": "/",           "dest": "/public/index.html" },
+    { "src": "/index.html", "dest": "/public/index.html" },
+    { "src": "/(.*)",       "dest": "/public/$1" }
   ]
 }
