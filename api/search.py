@@ -42,8 +42,8 @@ NEGO_THRESHOLD   = 215_000
 GROQ_MAX_CANDIDATES = 12
 MIN_SCORE_FOR_GROQ  = 2
 
-MODEL_EXPAND = "openai/gpt-oss-20b"
-MODEL_RANK   = "openai/gpt-oss-120b"
+MODEL_EXPAND = "llama-3.1-8b-instant"
+MODEL_RANK   = "llama-3.3-70b-versatile"
 
 _GROQ_HEADERS = {
     "Content-Type":    "application/json",
