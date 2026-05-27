@@ -9,8 +9,8 @@ import time
 import urllib.parse
 import urllib.request
 
-from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase
-from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
+from utils.supabase_search import supabase_vector_search, log_query_to_supabase
+from utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
 # ── Defensive startup log ────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
