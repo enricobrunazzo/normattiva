@@ -517,7 +517,7 @@ def _fetch_from_supabase(norma_id: str) -> dict | None:
         return None
 
 
-class handler(BaseHTTPRequestHandler):
+class HandlerClass(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -580,5 +580,4 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-
-handler = handler
+handler = HandlerClass
