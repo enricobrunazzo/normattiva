@@ -1,14 +1,9 @@
 {
   "version": 2,
-  "functions": {
-    "api/search.py": {},
-    "api/norma.py":  {},
-    "api/ingest.py": {}
-  },
   "routes": [
-    { "src": "/api/search", "dest": "/api/search" },
-    { "src": "/api/norma",  "dest": "/api/norma" },
-    { "src": "/api/ingest", "dest": "/api/ingest" },
+    { "src": "/api/search", "dest": "/api/search.py" },
+    { "src": "/api/norma",  "dest": "/api/norma.py" },
+    { "src": "/api/ingest", "dest": "/api/ingest.py" },
     { "src": "/(.*)",       "dest": "/public/$1" }
   ]
 }
