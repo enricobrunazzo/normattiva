@@ -9,8 +9,8 @@ import time
 import urllib.parse
 import urllib.request
 
-from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
-from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
+from utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
+from utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
 # ── Defensive startup log ─────────────────────────────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
@@ -426,8 +426,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -823,7 +823,6 @@ class handler(BaseHTTPRequestHandler):
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
-                # fix: passa query_text per abilitare similarity check D in persist_discovered_norme
                 persisted = persist_discovered_norme(discovered, query_text=testo)
                 existing_ids = {r.get("id") for r in results}
                 deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
