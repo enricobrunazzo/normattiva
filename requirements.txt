@@ -1,1 +1,5 @@
+# Dipendenze Python per backend Normattiva
+# Il backend runtime usa stdlib + chiamate HTTP dirette.
+# Supabase client serve per script di ingestione locale.
 
+supabase>=2.5.0
