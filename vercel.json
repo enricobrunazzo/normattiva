@@ -25,7 +25,6 @@
     { "src": "/api/search", "dest": "/api/search.py" },
     { "src": "/api/norma",  "dest": "/api/norma.py" },
     { "src": "/api/ingest", "dest": "/api/ingest.py" },
-    { "src": "/",           "dest": "/public/index.html" },
     { "src": "/(.*)",       "dest": "/public/$1" }
   ]
 }

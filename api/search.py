@@ -9,8 +9,8 @@ import time
 import urllib.parse
 import urllib.request
 
-from utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
-from utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
+from api.utils.supabase_search import supabase_vector_search, log_query_to_supabase, is_supabase_configured, get_embedding
+from api.utils.groq_discover import filter_pertinent, discover_missing_norme, persist_discovered_norme
 
 # ── Defensive startup log ─────────────────────────────────────────────────────────────────────────────────
 _GROQ_API_KEY_PRESENT = bool(os.environ.get("GROQ_API_KEY", ""))
@@ -388,14 +388,14 @@ def _importo_label(importo_str: str, convenzione: bool = False) -> str:
     if val is None:
         return ""
     if convenzione:
-        return f"€{val:,.0f} — Adesione a convenzione Consip / Ordine su MEPA"
+        return f"\u20ac{val:,.0f} \u2014 Adesione a convenzione Consip / Ordine su MEPA"
     if val <= SEMI_THRESHOLD:
-        return f"€{val:,.0f} — Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
+        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto semplificato (art. 50 co. 1, D.Lgs. 36/2023)"
     elif val <= DIRECT_THRESHOLD:
-        return f"€{val:,.0f} — Affidamento diretto (art. 50, D.Lgs. 36/2023)"
+        return f"\u20ac{val:,.0f} \u2014 Affidamento diretto (art. 50, D.Lgs. 36/2023)"
     elif val <= NEGO_THRESHOLD:
-        return f"€{val:,.0f} — Procedura negoziata (art. 72, D.Lgs. 36/2023)"
-    return f"€{val:,.0f} — Procedura aperta (art. 71, D.Lgs. 36/2023)"
+        return f"\u20ac{val:,.0f} \u2014 Procedura negoziata (art. 72, D.Lgs. 36/2023)"
+    return f"\u20ac{val:,.0f} \u2014 Procedura aperta (art. 71, D.Lgs. 36/2023)"
 
 
 def _is_proroga_query(testo: str, oggetto: str) -> bool:
@@ -426,8 +426,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -551,7 +551,7 @@ def _inject_cig_post_filter(results: list, importo: str, convenzione: bool) -> l
     entry["text_vigente"] = ""
     entry["text_vigente_disponibile"] = False
     entry["ai_motivation"] = (
-        f"Per ogni contratto pubblico di importo superiore a €{SEMI_THRESHOLD:,} la stazione appaltante "
+        f"Per ogni contratto pubblico di importo superiore a \u20ac{SEMI_THRESHOLD:,} la stazione appaltante "
         "è obbligata ad acquisire il CIG (Codice Identificativo Gara) ai sensi dell'art. 3 co. 5 "
         "della L. 136/2010 e a riportarlo nella determina a contrarre e nei documenti di pagamento. "
         "La mancata indicazione costituisce illecito amministrativo."
@@ -574,7 +574,7 @@ def _remove_cig_if_below_threshold(results: list, importo: str, convenzione: boo
         return results
     filtered = [r for r in results if r["id"] != "l_136_2010"]
     if len(filtered) < len(results):
-        print(f"[CIG FILTER] rimossa l_136_2010 (importo €{val:,.0f} ≤ {SEMI_THRESHOLD:,} — CIG non obbligatorio)", flush=True)
+        print(f"[CIG FILTER] rimossa l_136_2010 (importo \u20ac{val:,.0f} \u2264 {SEMI_THRESHOLD:,} \u2014 CIG non obbligatorio)", flush=True)
     return filtered
 
 
@@ -649,7 +649,7 @@ def _groq_rank(testo: str, tipo_atto: str, oggetto: str, importo: str, candidate
     try:
         norme_lines = []
         for n in groq_candidates:
-            line = f"- ID: {n['id']} | {n['estremi']} — {n['titolo']}"
+            line = f"- ID: {n['id']} | {n['estremi']} \u2014 {n['titolo']}"
             testo_vigente = n.get("text_vigente", "").strip()
             if testo_vigente:
                 line += f"\n  [Testo vigente]: {testo_vigente[:600].replace(chr(10), ' ')}..."
