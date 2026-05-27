@@ -2,10 +2,5 @@
 name = "normattiva"
 version = "0.1.0"
 description = "Assistente normativo per la PA italiana"
-requires-python = ">=3.12"
-dependencies = [
-    "supabase>=2.0.0",
-]
-
-[tool.vercel]
-entrypoint = "api.search:handler"
+requires-python = ">=3.9,<3.10"
+dependencies = []
