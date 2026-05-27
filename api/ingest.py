@@ -17,7 +17,6 @@ import time
 import urllib.parse
 import urllib.request
 
-from http.server import BaseHTTPRequestHandler
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
@@ -28,15 +27,6 @@ _HEADERS_SUPA = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
 }
-
-
-def _json_response(handler: BaseHTTPRequestHandler, data: dict, status: int = 200):
-    body = json.dumps(data, ensure_ascii=False, indent=2).encode()
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.end_headers()
-    handler.wfile.write(body)
 
 
 def _get_norme_senza_embedding() -> list[dict]:
@@ -166,36 +156,44 @@ def _run_ingest() -> dict:
     }
 
 
-class handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):  # noqa: N802
-        print(f"[INGEST HTTP] {fmt % args}", flush=True)
 
-    def _check_auth(self) -> bool:
-        # Controlla header X-Ingest-Key o query param key
-        key_header = self.headers.get("X-Ingest-Key", "")
-        qs = urllib.parse.parse_qs(
-            urllib.parse.urlparse(self.path).query
-        )
-        key_param = qs.get("key", [""])[0]
-        return (key_header == INGEST_SECRET) or (key_param == INGEST_SECRET)
+from urllib.parse import urlparse, parse_qs
 
-    def do_OPTIONS(self):  # noqa: N802
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "X-Ingest-Key, Content-Type")
-        self.end_headers()
+def _wsgi_json_response(start_response, data: dict, status: int = 200):
+    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    status_text = {200: "200 OK", 201: "201 Created", 400: "400 Bad Request",
+                   401: "401 Unauthorized", 500: "500 Internal Server Error"}.get(status, f"{status} Unknown")
+    start_response(status_text, [
+        ("Content-Type", "application/json; charset=utf-8"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Content-Length", str(len(body))),
+    ])
+    return [body]
 
-    def do_GET(self):  # noqa: N802
-        if not self._check_auth():
-            _json_response(self, {"error": "Unauthorized: X-Ingest-Key mancante o errata"}, 401)
-            return
-        result = _run_ingest()
-        _json_response(self, result)
 
-    def do_POST(self):  # noqa: N802
-        if not self._check_auth():
-            _json_response(self, {"error": "Unauthorized: X-Ingest-Key mancante o errata"}, 401)
-            return
-        result = _run_ingest()
-        _json_response(self, result)
+def _check_auth_wsgi(environ) -> bool:
+    key_header = environ.get("HTTP_X_INGEST_KEY", "")
+    qs = parse_qs(environ.get("QUERY_STRING", ""))
+    key_param = qs.get("key", [""])[0]
+    return (key_header == INGEST_SECRET) or (key_param == INGEST_SECRET)
+
+
+def app(environ, start_response):
+    method = environ.get("REQUEST_METHOD", "GET").upper()
+
+    if method == "OPTIONS":
+        start_response("200 OK", [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ("Access-Control-Allow-Headers", "X-Ingest-Key, Content-Type"),
+        ])
+        return [b""]
+
+    if not _check_auth_wsgi(environ):
+        return _wsgi_json_response(start_response, {"error": "Unauthorized: X-Ingest-Key mancante o errata"}, 401)
+
+    result = _run_ingest()
+    return _wsgi_json_response(start_response, result)
+
+
+handler = app
