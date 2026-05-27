@@ -1,4 +1,5 @@
 """Endpoint GET /api/norma?id=<norma_id> — scheda dettaglio norma con articoli_dettaglio."""
+from http.server import BaseHTTPRequestHandler
 import json
 import os
 import urllib.parse
@@ -516,69 +517,68 @@ def _fetch_from_supabase(norma_id: str) -> dict | None:
         return None
 
 
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        norma_id = params.get("id", [""])[0].strip()
 
-from urllib.parse import urlparse, parse_qs
+        if not norma_id:
+            self._send_error(400, "Parametro 'id' mancante")
+            return
 
-def app(environ, start_response):
-    method = environ.get("REQUEST_METHOD", "GET").upper()
+        # 1. Cerca nel DB locale
+        norma = NORME_BY_ID.get(norma_id)
 
-    if method == "OPTIONS":
-        start_response("204 No Content", [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Allow-Methods", "GET, OPTIONS"),
-            ("Access-Control-Allow-Headers", "Content-Type"),
-        ])
-        return [b""]
+        # 2. Fallback Supabase per norme discovered da Groq
+        if not norma:
+            print(f"[NORMA] {norma_id!r} non nel DB locale, provo Supabase...", flush=True)
+            norma = _fetch_from_supabase(norma_id)
 
-    qs = environ.get("QUERY_STRING", "")
-    params = parse_qs(qs)
-    norma_id = params.get("id", [""])[0].strip()
+        if not norma:
+            self._send_error(404, f"Norma '{norma_id}' non trovata")
+            return
 
-    def send_error(code, msg):
+        testi_norma = ARTICOLI_TESTO.get(norma_id, {})
+        articoli_dettaglio = [
+            {"label": label, "testo": testi_norma.get(label, "")}
+            for label in norma.get("articoli_chiave", [])
+        ]
+
+        output = {
+            "id":                 norma["id"],
+            "titolo":             norma["titolo"],
+            "estremi":            norma["estremi"],
+            "descrizione":        norma["descrizione"],
+            "articoli_chiave":    norma.get("articoli_chiave", []),
+            "articoli_dettaglio": articoli_dettaglio,
+            "url_normattiva":     norma.get("url_normattiva", ""),
+            "url_ricerca":        norma.get("url_ricerca", ""),
+        }
+
+        body = json.dumps(output, ensure_ascii=False, indent=2).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def _send_error(self, code: int, msg: str) -> None:
         body = json.dumps({"error": msg}, ensure_ascii=False).encode("utf-8")
-        status = f"{code} {'Bad Request' if code == 400 else 'Not Found'}"
-        start_response(status, [
-            ("Content-Type", "application/json; charset=utf-8"),
-            ("Access-Control-Allow-Origin", "*"),
-            ("Content-Length", str(len(body))),
-        ])
-        return [body]
-
-    if not norma_id:
-        return send_error(400, "Parametro 'id' mancante")
-
-    norma = NORME_BY_ID.get(norma_id)
-    if not norma:
-        print(f"[NORMA] {norma_id!r} non nel DB locale, provo Supabase...", flush=True)
-        norma = _fetch_from_supabase(norma_id)
-
-    if not norma:
-        return send_error(404, f"Norma '{norma_id}' non trovata")
-
-    testi_norma = ARTICOLI_TESTO.get(norma_id, {})
-    articoli_dettaglio = [
-        {"label": label, "testo": testi_norma.get(label, "")}
-        for label in norma.get("articoli_chiave", [])
-    ]
-
-    output = {
-        "id":                 norma["id"],
-        "titolo":             norma["titolo"],
-        "estremi":            norma["estremi"],
-        "descrizione":        norma["descrizione"],
-        "articoli_chiave":    norma.get("articoli_chiave", []),
-        "articoli_dettaglio": articoli_dettaglio,
-        "url_normattiva":     norma.get("url_normattiva", ""),
-        "url_ricerca":        norma.get("url_ricerca", ""),
-    }
-
-    body = json.dumps(output, ensure_ascii=False, indent=2).encode("utf-8")
-    start_response("200 OK", [
-        ("Content-Type", "application/json; charset=utf-8"),
-        ("Access-Control-Allow-Origin", "*"),
-        ("Content-Length", str(len(body))),
-    ])
-    return [body]
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 
-handler = app
+handler = handler
