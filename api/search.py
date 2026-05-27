@@ -426,8 +426,8 @@ def _fetch_norma_text(url: str, timeout: int = FETCH_TIMEOUT_PER_NORMA) -> str:
         cleaned = re.sub(r"<!--.*?-->", "", cleaned, flags=re.S)
         block = None
         for pattern in [
-            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\']?[^>]*>(.*?)</(?:div|article|section)>',
-            r'<(?:div|article)[^>]+id=[\"\']?main[\"\']?[^>]*>(.*?)</(?:div|article)>',
+            r'<(?:div|article|section)[^>]+(?:id|class)=[\"\'']?[^\"\']*(?:atto|norma|testo|corpo|content)[^\"\']*[\"\'']?[^>]*>(.*?)</(?:div|article|section)>',
+            r'<(?:div|article)[^>]+id=[\"\'']?main[\"\'']?[^>]*>(.*?)</(?:div|article)>',
         ]:
             m = re.search(pattern, cleaned, flags=re.S | re.I)
             if m:
@@ -823,7 +823,7 @@ class handler(BaseHTTPRequestHandler):
         if os.environ.get("GROQ_API_KEY", ""):
             discovered = discover_missing_norme(testo, tipo_atto, oggetto, results)
             if discovered:
-                persisted = persist_discovered_norme(discovered, query_text=testo)
+                persisted = persist_discovered_norme(discovered)
                 existing_ids = {r.get("id") for r in results}
                 deduped_persisted = [n for n in persisted if n.get("id") not in existing_ids]
                 results = results + deduped_persisted
