@@ -777,7 +777,7 @@ def _run_diagnostics(full_query: str) -> dict:
     return diag
 
 
-class HandlerClass(BaseHTTPRequestHandler):
+class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -874,4 +874,5 @@ class HandlerClass(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
-handler = HandlerClass
+
+handler = handler
