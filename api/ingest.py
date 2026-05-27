@@ -166,7 +166,7 @@ def _run_ingest() -> dict:
     }
 
 
-class HandlerClass(BaseHTTPRequestHandler):
+class handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: N802
         print(f"[INGEST HTTP] {fmt % args}", flush=True)
 
@@ -199,5 +199,3 @@ class HandlerClass(BaseHTTPRequestHandler):
             return
         result = _run_ingest()
         _json_response(self, result)
-
-handler = HandlerClass
