@@ -1,4 +1,8 @@
 """Endpoint /api/search — ricerca normativa PA con ranking Groq/Llama."""
+import sys
+import os as _os
+sys.path.insert(0, _os.path.dirname(__file__))
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler
 from html import unescape
