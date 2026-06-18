@@ -1,0 +1,39 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 08:00 UTC
+    - cron: '0 8 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping-normattiva:
+    name: Ping Normattiva
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Normattiva Supabase
+        run: |
+          set +e
+
+          URL="${{ secrets.NORMATTIVA_SUPABASE_URL }}"
+          KEY="${{ secrets.NORMATTIVA_SUPABASE_ANON_KEY }}"
+
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::warning::NORMATTIVA_SUPABASE_URL or NORMATTIVA_SUPABASE_ANON_KEY is missing or empty."
+            exit 0
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${URL}/rest/v1/" \
+            -H "apikey: ${KEY}")
+          CURL_EXIT=$?
+
+          if [ $CURL_EXIT -ne 0 ]; then
+            echo "::warning::curl failed with exit code $CURL_EXIT — likely malformed URL."
+            exit 0
+          fi
+
+          echo "Normattiva status: $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "401" ]; then
+            echo "::warning::Normattiva returned HTTP $STATUS"
+          fi
