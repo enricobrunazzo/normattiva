@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "caveman",
+  "version": "0.1.0",
+  "description": "Compress Claude responses ~75% by dropping fluff while keeping technical accuracy",
+  "author": {
+    "name": "Julius Brussee",
+    "email": ""
+  },
+  "homepage": "https://github.com/JuliusBrussee/caveman",
+  "skills": [
+    "./"
+  ]
+}
