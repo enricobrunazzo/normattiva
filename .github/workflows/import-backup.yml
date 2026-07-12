@@ -1,0 +1,27 @@
+name: Importa backup Supabase
+on:
+  push:
+    paths:
+      - ".github/workflows/import-backup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copia il backup dal branch temporaneo di vigontina-stats
+        run: |
+          git clone --depth 1 --branch backup/normattiva-supabase \
+            https://github.com/enricobrunazzo/vigontina-stats source
+          rm -rf backup-normattiva source/.git
+          cp -r source/backup-normattiva backup-normattiva
+          rm -rf source
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backup-normattiva
+          git commit -m "Backup progetto Supabase Normattiva (schema, dati, edge function)"
+          git push
