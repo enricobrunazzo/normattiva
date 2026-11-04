@@ -10,36 +10,33 @@ permissions:
   contents: write
 
 jobs:
-  ping-normattiva:
-    name: Ping Normattiva
+  ping-normpai:
+    name: Ping NormPAI
     runs-on: ubuntu-latest
+    env:
+      # Progetto Supabase "NormPAI" (ref shluboroassdnvqjbapt).
+      # La publishable key e' pubblica per design (protetta da RLS),
+      # la stessa usata dal frontend.
+      SUPABASE_URL: https://shluboroassdnvqjbapt.supabase.co
+      SUPABASE_KEY: sb_publishable_Rzg2arXO7gI2sbf-ZwPVLg_A0Z6iH9n
     steps:
-      - name: Ping Normattiva Supabase
+      - name: Query NormPAI database
         run: |
-          set +e
-
-          URL="${{ secrets.NORMATTIVA_SUPABASE_URL }}"
-          KEY="${{ secrets.NORMATTIVA_SUPABASE_ANON_KEY }}"
-
-          if [ -z "$URL" ] || [ -z "$KEY" ]; then
-            echo "::warning::NORMATTIVA_SUPABASE_URL or NORMATTIVA_SUPABASE_ANON_KEY is missing or empty."
-            exit 0
-          fi
-
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            "${URL}/rest/v1/" \
-            -H "apikey: ${KEY}")
-          CURL_EXIT=$?
-
-          if [ $CURL_EXIT -ne 0 ]; then
-            echo "::warning::curl failed with exit code $CURL_EXIT — likely malformed URL."
-            exit 0
-          fi
-
-          echo "Normattiva status: $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "401" ]; then
-            echo "::warning::Normattiva returned HTTP $STATUS"
-          fi
+          # Interroga una tabella reale, cosi' la richiesta arriva al database
+          # Postgres (non solo al gateway) e conta come attivita' del progetto.
+          for i in 1 2 3; do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+              "${SUPABASE_URL}/rest/v1/norme?select=norma_id&limit=1" \
+              -H "apikey: ${SUPABASE_KEY}") || STATUS="curl-error"
+            echo "Tentativo $i - NormPAI status: $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              exit 0
+            fi
+            sleep 20
+          done
+          # Fallisce in modo visibile: GitHub invia una email di errore.
+          echo "::error::Ping a NormPAI fallito (status $STATUS). Il progetto potrebbe essere in pausa."
+          exit 1
 
   keep-repo-active:
     name: Keep repository active
